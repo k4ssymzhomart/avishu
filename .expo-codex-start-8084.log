@@ -1,6 +1,24 @@
 env: load .env.local
 env: export EXPO_PUBLIC_FIREBASE_API_KEY EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN EXPO_PUBLIC_FIREBASE_PROJECT_ID EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID EXPO_PUBLIC_FIREBASE_APP_ID
 Starting project at C:\Users\PC\Desktop\avishu
-Metro is running in CI mode, reloads are disabled. Remove CI=true to enable watch mode.
 Starting Metro Bundler
-warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8084
+Logs for your project will appear below.
+iOS node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+iOS Bundled 2083ms node_modules\expo-router\entry.js (1598 modules)
+ WARN  No native ExpoFirebaseCore module found, are you sure the expo-firebase-core module is linked properly?
+ WARN  expo-notifications: Android Push notifications (remote notifications) functionality provided by expo-notifications was removed from Expo Go with the release of SDK 53. Use a development build instead of Expo Go. Read more at https://docs.expo.dev/develop/development-builds/introduction/.
+ WARN  `expo-notifications` functionality is not fully supported in Expo Go:
+We recommend you instead use a development build to avoid limitations. Learn more: https://expo.fyi/dev-client.
+ WARN  [2026-03-29T12:26:20.224Z]  @firebase/auth: Auth (12.11.0): 
+You are initializing Firebase Auth for React Native without providing
+AsyncStorage. Auth state will default to memory persistence and will not
+persist between sessions. In order to persist auth state, install the package
+"@react-native-async-storage/async-storage" and provide it to
+initializeAuth:
+
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+});

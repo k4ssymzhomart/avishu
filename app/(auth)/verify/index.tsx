@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { Redirect, useRouter } from 'expo-router';
 import { Keyboard, StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native';
 
@@ -9,8 +10,9 @@ import { Screen } from '@/components/layout/Screen';
 import { Button } from '@/components/ui/Button';
 import { TextButton } from '@/components/ui/TextButton';
 import { useRoleRedirect } from '@/hooks/useRoleRedirect';
+import { firebaseConfig, hasFirebaseConfig } from '@/lib/firebase';
 import { theme } from '@/lib/theme/tokens';
-import { DEMO_PHONE_OTP_CODE, isDemoPhoneAuthEnabled, resolvePhoneAuthErrorMessage } from '@/services/auth';
+import { isDemoPhoneAuthEnabled, resolvePhoneAuthErrorMessage } from '@/services/auth';
 import { useSessionStore } from '@/store/session';
 
 export default function VerifyOtpScreen() {
@@ -27,6 +29,7 @@ export default function VerifyOtpScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(30);
   const usesDemoCode = isDemoPhoneAuthEnabled();
+  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal | null>(null);
 
   useEffect(() => {
     if (resendCountdown <= 0) {
@@ -81,11 +84,12 @@ export default function VerifyOtpScreen() {
     setStatusMessage(null);
 
     try {
-      await beginPhoneAuth(pendingPhoneDisplayNumber, { forceResend: true });
+      await beginPhoneAuth(pendingPhoneDisplayNumber, {
+        appVerifier: recaptchaVerifier.current,
+        forceResend: true,
+      });
       setCode('');
-      setStatusMessage(
-        usesDemoCode ? `Demo mode is ready. Use code ${DEMO_PHONE_OTP_CODE} to continue.` : 'A fresh 6-digit code has been sent.',
-      );
+      setStatusMessage(usesDemoCode ? 'Demo mode is ready. Enter any 6-digit code to continue.' : 'A fresh 6-digit code has been sent.');
       setResendCountdown(30);
     } catch (error) {
       setErrorMessage(resolvePhoneAuthErrorMessage(error, 'request'));
@@ -122,7 +126,7 @@ export default function VerifyOtpScreen() {
             showBackButton
             subtitle={
               usesDemoCode
-                ? `Enter demo code ${DEMO_PHONE_OTP_CODE} to continue in Expo Go.`
+                ? 'Enter any 6-digit code to continue in Expo Go.'
                 : 'Enter the real 6-digit SMS code from Firebase to continue.'
             }
             title="Enter the code."
@@ -144,6 +148,13 @@ export default function VerifyOtpScreen() {
           {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
         </Screen>
+        {hasFirebaseConfig && !usesDemoCode ? (
+          <FirebaseRecaptchaVerifierModal
+            attemptInvisibleVerification
+            firebaseConfig={firebaseConfig}
+            ref={recaptchaVerifier}
+          />
+        ) : null}
       </View>
     </TouchableWithoutFeedback>
   );

@@ -2055,6 +2055,246 @@ h2 {
   margin-bottom: 6px;
 }
 
+/* Demo slides (slides 05-07) */
+.demo-slide .frame {
+  background:
+    radial-gradient(circle at 14% 18%, rgba(255, 255, 255, 0.8), transparent 34%),
+    linear-gradient(180deg, #fbf8f2, #f1ede5 58%, #ece6dc);
+}
+
+.demo-slide.theme-ink .frame {
+  background:
+    radial-gradient(circle at 82% 18%, rgba(255, 255, 255, 0.09), transparent 28%),
+    linear-gradient(180deg, #171718, #101011 58%, #0b0b0c);
+}
+
+.demo-body {
+  display: grid;
+  grid-template-columns: 1.12fr 0.88fr;
+  gap: 42px;
+  height: 100%;
+  align-items: stretch;
+}
+
+.demo-media-stack {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 16px;
+}
+
+.demo-video-card {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 18px;
+  padding: 24px;
+  border-radius: 24px;
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.demo-slide.theme-ink .demo-video-card {
+  border-color: var(--line-ink);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.demo-video-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.demo-slot-pill,
+.demo-media-tags span,
+.demo-role-title {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  background: rgba(17, 17, 17, 0.04);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #5f5952;
+}
+
+.demo-slide.theme-ink .demo-slot-pill,
+.demo-slide.theme-ink .demo-media-tags span,
+.demo-slide.theme-ink .demo-role-title {
+  border-color: var(--line-ink);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.demo-video-stage {
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  background:
+    radial-gradient(circle at top center, rgba(255, 255, 255, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(17, 17, 17, 0.96), rgba(12, 12, 12, 0.92));
+  display: grid;
+  place-items: center;
+  padding: 38px;
+}
+
+.demo-video-stage::before {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+
+.demo-video-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 430px;
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+}
+
+.demo-video-copy strong {
+  font-size: 40px;
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+  color: #ffffff;
+}
+
+.demo-video-copy p {
+  margin: 0;
+  max-width: 28ch;
+  font-size: 16px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.demo-media-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.demo-copy-column {
+  min-height: 0;
+  display: grid;
+  align-content: center;
+  gap: 18px;
+  padding: 12px 0;
+}
+
+.demo-role-badge {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.demo-role-badge .micro-copy {
+  margin: 0 0 6px;
+}
+
+.demo-heading {
+  gap: 16px;
+}
+
+.demo-heading h2 {
+  max-width: 9ch;
+  font-size: 70px;
+  line-height: 0.94;
+}
+
+.demo-heading .lead-copy {
+  max-width: 20ch;
+}
+
+.demo-focus-panel {
+  padding: 22px 24px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.demo-slide.theme-ink .demo-focus-panel {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--line-ink);
+}
+
+.demo-focus-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.demo-focus-list li {
+  padding-top: 14px;
+  border-top: 1px solid rgba(17, 17, 17, 0.14);
+  font-size: 16px;
+  line-height: 1.5;
+  color: #4a4540;
+}
+
+.demo-slide.theme-ink .demo-focus-list li {
+  border-top-color: var(--line-ink);
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.demo-focus-list li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.demo-note-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.demo-note-card {
+  min-height: 160px;
+  padding: 20px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.demo-slide.theme-ink .demo-note-card {
+  border-color: var(--line-ink);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.demo-note-card strong {
+  display: block;
+  font-size: 24px;
+  line-height: 1.06;
+  letter-spacing: -0.04em;
+}
+
+.demo-note-card p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.48;
+  color: #4e4943;
+}
+
+.demo-slide.theme-ink .demo-note-card p {
+  color: rgba(255, 255, 255, 0.74);
+}
+
 .closing-body {
   grid-template-columns: 0.84fr 1.16fr;
   gap: 42px;

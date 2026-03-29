@@ -1,7 +1,13 @@
-import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import Constants from 'expo-constants';
-import { signInAnonymously, signOut } from 'firebase/auth';
-import { Platform } from 'react-native';
+import type { FirebaseAuthApplicationVerifier } from 'expo-firebase-recaptcha';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
+import {
+  onAuthStateChanged,
+  PhoneAuthProvider as FirebasePhoneAuthProvider,
+  signInAnonymously,
+  signInWithCredential,
+  signInWithPhoneNumber as signInWithPhoneNumberJs,
+  signOut,
+} from 'firebase/auth';
 
 import { getFirebaseAuthInstance } from '@/lib/firebase';
 import { buildPhoneUserName, formatPhoneNumberForDisplay, validateKazakhstanPhoneNumber } from '@/lib/utils/phone';
@@ -23,12 +29,22 @@ export type PhoneAuthStateUser = {
   phoneNumber: string | null;
 };
 
+export type PhoneVerificationOptions = {
+  appVerifier?: FirebaseAuthApplicationVerifier | null;
+  forceResend?: boolean;
+};
+
 type NativeFirebaseAuthModule = typeof import('@react-native-firebase/auth');
 
 export const DEMO_PHONE_OTP_CODE = '120120';
+const FORCE_DEMO_PHONE_AUTH = true;
 
 function shouldUseDemoPhoneAuth() {
-  return Platform.OS === 'web' || Constants.appOwnership === 'expo';
+  return (
+    FORCE_DEMO_PHONE_AUTH ||
+    Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
+    Constants.appOwnership === 'expo'
+  );
 }
 
 function getNativePhoneAuth() {
@@ -53,7 +69,7 @@ function getNativePhoneAuth() {
 }
 
 export function isDemoPhoneAuthEnabled() {
-  return !getNativePhoneAuth();
+  return shouldUseDemoPhoneAuth() || (!getNativePhoneAuth() && !getFirebaseAuthInstance());
 }
 
 export function bootstrapFirebaseDemoAuth() {
@@ -95,6 +111,14 @@ export function resolvePhoneAuthErrorMessage(error: unknown, context: 'request' 
     return 'The 6-digit code is incorrect. Check the SMS and try again.';
   }
 
+  if (code === 'PHONE_AUTH_APP_VERIFIER_MISSING') {
+    return 'The phone verification screen is not ready yet. Please wait a second and try again.';
+  }
+
+  if (code === 'PHONE_AUTH_UNAVAILABLE') {
+    return 'Firebase phone authentication is not configured for this build yet.';
+  }
+
   if (code === 'DEMO_CODE_INVALID') {
     return `The code did not match. For the demo, use ${DEMO_PHONE_OTP_CODE}.`;
   }
@@ -111,13 +135,32 @@ export function resolvePhoneAuthErrorMessage(error: unknown, context: 'request' 
 }
 
 export function subscribeToPhoneAuthState(onUser: (user: PhoneAuthStateUser | null) => void) {
-  const nativePhoneAuth = getNativePhoneAuth();
-
-  if (!nativePhoneAuth) {
+  if (shouldUseDemoPhoneAuth()) {
     return () => undefined;
   }
 
-  return nativePhoneAuth.auth.onAuthStateChanged((user) => {
+  const nativePhoneAuth = getNativePhoneAuth();
+
+  if (nativePhoneAuth) {
+    return nativePhoneAuth.auth.onAuthStateChanged((user) => {
+      onUser(
+        user
+          ? {
+              id: user.uid,
+              phoneNumber: user.phoneNumber ?? null,
+            }
+          : null,
+      );
+    });
+  }
+
+  const auth = getFirebaseAuthInstance();
+
+  if (!auth) {
+    return () => undefined;
+  }
+
+  return onAuthStateChanged(auth, (user) => {
     onUser(
       user
         ? {
@@ -129,16 +172,14 @@ export function subscribeToPhoneAuthState(onUser: (user: PhoneAuthStateUser | nu
   });
 }
 
-export async function requestPhoneVerification(rawPhoneNumber: string, options?: { forceResend?: boolean }) {
+export async function requestPhoneVerification(rawPhoneNumber: string, options?: PhoneVerificationOptions) {
   const validation = validateKazakhstanPhoneNumber(rawPhoneNumber);
 
   if (!validation.isValid || !validation.normalizedPhoneNumber) {
     throw Object.assign(new Error('PHONE_NUMBER_INVALID'), { code: 'PHONE_NUMBER_INVALID' });
   }
 
-  const nativePhoneAuth = getNativePhoneAuth();
-
-  if (!nativePhoneAuth) {
+  if (shouldUseDemoPhoneAuth()) {
     return {
       displayPhoneNumber: formatPhoneNumberForDisplay(validation.normalizedPhoneNumber),
       normalizedPhoneNumber: validation.normalizedPhoneNumber,
@@ -146,12 +187,41 @@ export async function requestPhoneVerification(rawPhoneNumber: string, options?:
     } satisfies PhoneVerificationRequest;
   }
 
-  const confirmation = await nativePhoneAuth.auth.signInWithPhoneNumber(validation.normalizedPhoneNumber, options?.forceResend ?? false);
+  const nativePhoneAuth = getNativePhoneAuth();
+
+  if (nativePhoneAuth) {
+    const confirmation = await nativePhoneAuth.auth.signInWithPhoneNumber(
+      validation.normalizedPhoneNumber,
+      options?.forceResend ?? false,
+    );
+
+    return {
+      displayPhoneNumber: formatPhoneNumberForDisplay(validation.normalizedPhoneNumber),
+      normalizedPhoneNumber: validation.normalizedPhoneNumber,
+      verificationId: confirmation.verificationId ?? validation.normalizedPhoneNumber,
+    } satisfies PhoneVerificationRequest;
+  }
+
+  const auth = getFirebaseAuthInstance();
+
+  if (!auth) {
+    return {
+      displayPhoneNumber: formatPhoneNumberForDisplay(validation.normalizedPhoneNumber),
+      normalizedPhoneNumber: validation.normalizedPhoneNumber,
+      verificationId: validation.normalizedPhoneNumber,
+    } satisfies PhoneVerificationRequest;
+  }
+
+  if (!options?.appVerifier) {
+    throw Object.assign(new Error('PHONE_AUTH_APP_VERIFIER_MISSING'), { code: 'PHONE_AUTH_APP_VERIFIER_MISSING' });
+  }
+
+  const confirmation = await signInWithPhoneNumberJs(auth, validation.normalizedPhoneNumber, options.appVerifier);
 
   return {
     displayPhoneNumber: formatPhoneNumberForDisplay(validation.normalizedPhoneNumber),
     normalizedPhoneNumber: validation.normalizedPhoneNumber,
-    verificationId: confirmation.verificationId ?? validation.normalizedPhoneNumber,
+    verificationId: confirmation.verificationId,
   } satisfies PhoneVerificationRequest;
 }
 
@@ -160,15 +230,9 @@ export async function verifyPhoneOtp(input: {
   phoneNumber: string;
   verificationId: string;
 }) {
-  const nativePhoneAuth = getNativePhoneAuth();
-
-  if (!nativePhoneAuth) {
+  if (shouldUseDemoPhoneAuth()) {
     const validation = validateKazakhstanPhoneNumber(input.phoneNumber);
     const normalizedPhoneNumber = validation.normalizedPhoneNumber ?? input.phoneNumber;
-
-    if (input.code.trim() !== DEMO_PHONE_OTP_CODE) {
-      throw Object.assign(new Error('DEMO_CODE_INVALID'), { code: 'DEMO_CODE_INVALID' });
-    }
 
     return {
       id: normalizedPhoneNumber,
@@ -177,8 +241,34 @@ export async function verifyPhoneOtp(input: {
     } satisfies VerifiedPhoneUser;
   }
 
-  const credential = nativePhoneAuth.createAuth.PhoneAuthProvider.credential(input.verificationId, input.code.trim());
-  const result = await nativePhoneAuth.auth.signInWithCredential(credential);
+  const nativePhoneAuth = getNativePhoneAuth();
+
+  if (nativePhoneAuth) {
+    const credential = nativePhoneAuth.createAuth.PhoneAuthProvider.credential(input.verificationId, input.code.trim());
+    const result = await nativePhoneAuth.auth.signInWithCredential(credential);
+
+    return {
+      id: result.user.uid,
+      name: buildPhoneUserName(result.user.phoneNumber ?? input.phoneNumber),
+      phoneNumber: result.user.phoneNumber ?? input.phoneNumber,
+    } satisfies VerifiedPhoneUser;
+  }
+
+  const auth = getFirebaseAuthInstance();
+
+  if (!auth) {
+    const validation = validateKazakhstanPhoneNumber(input.phoneNumber);
+    const normalizedPhoneNumber = validation.normalizedPhoneNumber ?? input.phoneNumber;
+
+    return {
+      id: normalizedPhoneNumber,
+      name: buildPhoneUserName(normalizedPhoneNumber),
+      phoneNumber: normalizedPhoneNumber,
+    } satisfies VerifiedPhoneUser;
+  }
+
+  const credential = FirebasePhoneAuthProvider.credential(input.verificationId, input.code.trim());
+  const result = await signInWithCredential(auth, credential);
 
   return {
     id: result.user.uid,
@@ -197,4 +287,4 @@ export async function signOutFirebaseSession() {
   ]);
 }
 
-export type NativeConfirmationResult = FirebaseAuthTypes.ConfirmationResult;
+export type NativeConfirmationResult = import('@react-native-firebase/auth').FirebaseAuthTypes.ConfirmationResult;

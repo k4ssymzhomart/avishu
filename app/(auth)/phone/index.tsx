@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { Redirect, useRouter } from 'expo-router';
 import { Keyboard, StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native';
 
@@ -9,9 +10,10 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { useRoleRedirect } from '@/hooks/useRoleRedirect';
+import { firebaseConfig, hasFirebaseConfig } from '@/lib/firebase';
 import { theme } from '@/lib/theme/tokens';
 import { formatKazakhstanPhoneInput, validateKazakhstanPhoneNumber } from '@/lib/utils/phone';
-import { DEMO_PHONE_OTP_CODE, isDemoPhoneAuthEnabled, resolvePhoneAuthErrorMessage } from '@/services/auth';
+import { isDemoPhoneAuthEnabled, resolvePhoneAuthErrorMessage } from '@/services/auth';
 import { useSessionStore } from '@/store/session';
 
 export default function PhoneAuthScreen() {
@@ -25,6 +27,7 @@ export default function PhoneAuthScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const validation = useMemo(() => validateKazakhstanPhoneNumber(phoneEntryValue), [phoneEntryValue]);
   const usesDemoCode = isDemoPhoneAuthEnabled();
+  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal | null>(null);
 
   if (authStatus === 'pending_verification') {
     return <Redirect href="/verify" />;
@@ -44,7 +47,9 @@ export default function PhoneAuthScreen() {
     setErrorMessage(null);
 
     try {
-      await beginPhoneAuth(validation.displayValue);
+      await beginPhoneAuth(validation.displayValue, {
+        appVerifier: recaptchaVerifier.current,
+      });
       router.replace('/verify');
     } catch (error) {
       setErrorMessage(resolvePhoneAuthErrorMessage(error, 'request'));
@@ -72,7 +77,7 @@ export default function PhoneAuthScreen() {
             showBackButton
             subtitle={
               usesDemoCode
-                ? `Expo Go demo mode: enter any Kazakhstan number, then use code ${DEMO_PHONE_OTP_CODE} on the next screen.`
+                ? 'Expo Go demo mode: enter any Kazakhstan number, then use any 6-digit code on the next screen.'
                 : "We'll send a real 6-digit Firebase verification code to your Kazakhstan number."
             }
             title="Enter your number."
@@ -90,7 +95,7 @@ export default function PhoneAuthScreen() {
             hint={
               validation.isValid
                 ? usesDemoCode
-                  ? `Continue, then enter demo code ${DEMO_PHONE_OTP_CODE}.`
+                  ? 'Continue, then enter any 6-digit code.'
                   : `Code will be sent to ${validation.displayValue}.`
                 : validation.message ?? undefined
             }
@@ -112,6 +117,13 @@ export default function PhoneAuthScreen() {
 
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
         </Screen>
+        {hasFirebaseConfig && !usesDemoCode ? (
+          <FirebaseRecaptchaVerifierModal
+            attemptInvisibleVerification
+            firebaseConfig={firebaseConfig}
+            ref={recaptchaVerifier}
+          />
+        ) : null}
       </View>
     </TouchableWithoutFeedback>
   );

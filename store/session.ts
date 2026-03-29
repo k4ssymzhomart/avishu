@@ -4,6 +4,8 @@ import { demoUsersByRole } from '@/lib/constants/demo';
 import { buildPhoneUserName, formatPhoneNumberForDisplay } from '@/lib/utils/phone';
 import {
   bootstrapFirebaseDemoAuth,
+  isDemoPhoneAuthEnabled,
+  type PhoneVerificationOptions,
   requestPhoneVerification,
   signOutFirebaseSession,
   verifyPhoneOtp,
@@ -23,7 +25,7 @@ type HydratedPhoneSession = {
 type SessionState = {
   authMethod: AuthMethod | null;
   authStatus: AuthStatus;
-  beginPhoneAuth: (phoneNumber?: string, options?: { forceResend?: boolean }) => Promise<void>;
+  beginPhoneAuth: (phoneNumber?: string, options?: PhoneVerificationOptions) => Promise<void>;
   completeRoleSelection: (role: UserRole, displayName?: string) => void;
   currentRole: UserRole | null;
   currentUserId: string | null;
@@ -226,8 +228,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }));
   },
   verifyOtpCode: async (code) => {
-    const pendingPhoneNumber = get().pendingPhoneNumber;
-    const pendingVerificationId = get().pendingVerificationId;
+    const state = get();
+    const isDemoFlow = isDemoPhoneAuthEnabled();
+    const pendingPhoneNumber =
+      state.pendingPhoneNumber ?? (isDemoFlow ? state.pendingPhoneDisplayNumber ?? state.phoneEntryValue : null);
+    const pendingVerificationId = state.pendingVerificationId ?? (isDemoFlow ? pendingPhoneNumber : null);
 
     if (!pendingPhoneNumber || !pendingVerificationId) {
       throw new Error('MISSING_VERIFICATION');
@@ -238,7 +243,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       phoneNumber: pendingPhoneNumber,
       verificationId: pendingVerificationId,
     });
-    const existingProfile = await getUserProfile(user.id);
+    const existingProfile = isDemoFlow ? null : await getUserProfile(user.id).catch(() => null);
     const restoredRole = existingProfile?.role ?? null;
 
     set({
