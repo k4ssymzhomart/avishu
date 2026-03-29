@@ -1,0 +1,41 @@
+export const typography = {
+  family: {
+    body: 'Montserrat',
+    display: 'Montserrat',
+    medium: 'Montserrat',
+    semibold: 'Montserrat',
+    mono: 'Montserrat',
+  },
+  lineHeight: {
+    xs: 16,
+    sm: 20,
+    md: 24,
+    lg: 28,
+    xl: 34,
+    xxl: 40,
+    xxxl: 48,
+    display: 64,
+  },
+  size: {
+    xs: 12,
+    sm: 14,
+    md: 16,
+    lg: 20,
+    xl: 24,
+    xxl: 32,
+    xxxl: 40,
+    display: 56,
+  },
+  tracking: {
+    tight: -1.2,
+    normal: 0,
+    wide: 1.2,
+    widest: 1.8,
+  },
+  weight: {
+    regular: '400',
+    medium: '500',
+    semibold: '600',
+    bold: '700',
+  },
+} as const;
