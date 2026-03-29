@@ -7,11 +7,12 @@ import type { Product } from '@/types/product';
 
 type ProductGridCardProps = {
   isFavorite?: boolean;
+  language?: 'en' | 'ru';
   onPress?: () => void;
   product: Product;
 };
 
-export function ProductGridCard({ isFavorite = false, onPress, product }: ProductGridCardProps) {
+export function ProductGridCard({ isFavorite = false, language = 'en', onPress, product }: ProductGridCardProps) {
   const content = (
     <View style={styles.card}>
       <View style={styles.imageFrame}>
@@ -22,7 +23,7 @@ export function ProductGridCard({ isFavorite = false, onPress, product }: Produc
         )}
         {product.availability === 'preorder' ? (
           <View style={styles.preorderBadge}>
-            <Text style={styles.preorderText}>PRE-ORDER</Text>
+            <Text style={styles.preorderText}>{language === 'ru' ? 'ПРЕДЗАКАЗ' : 'PRE-ORDER'}</Text>
           </View>
         ) : null}
         {isFavorite ? (
@@ -43,7 +44,7 @@ export function ProductGridCard({ isFavorite = false, onPress, product }: Produc
           {product.name}
         </Text>
         <Text numberOfLines={1} style={styles.category}>
-          {product.category ?? 'Curated selection'}
+          {product.category ?? (language === 'ru' ? 'Выбранная подборка' : 'Curated selection')}
         </Text>
       </View>
     </View>

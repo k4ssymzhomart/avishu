@@ -4,21 +4,23 @@ import { StyleSheet, Text, View } from 'react-native';
 import { AssetIcon } from '@/components/icons/AssetIcon';
 import { Screen } from '@/components/layout/Screen';
 import { Button } from '@/components/ui/Button';
+import { useCustomerI18n } from '@/hooks/useCustomerI18n';
 import { theme } from '@/lib/theme/tokens';
-import { formatCurrency, formatDeliveryMethod } from '@/lib/utils/format';
+import { formatCurrency } from '@/lib/utils/format';
 import { useCartStore } from '@/store/cart';
 
 export default function CheckoutSuccessScreen() {
   const router = useRouter();
+  const { copy, formatDeliveryMethodLabel } = useCustomerI18n();
   const { clearReceipt, lastReceipt } = useCartStore();
 
   if (!lastReceipt) {
     return (
       <Screen maxContentWidth={640} scroll>
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>No confirmed order</Text>
-          <Text style={styles.emptyBody}>Complete payment to see the final confirmation screen.</Text>
-          <Button label="Return home" onPress={() => router.replace('/customer')} size="sm" />
+          <Text style={styles.emptyTitle}>{copy.checkout.noConfirmedOrderTitle}</Text>
+          <Text style={styles.emptyBody}>{copy.checkout.noConfirmedOrderBody}</Text>
+          <Button label={copy.product.returnHome} onPress={() => router.replace('/customer')} size="sm" />
         </View>
       </Screen>
     );
@@ -28,47 +30,47 @@ export default function CheckoutSuccessScreen() {
     <Screen maxContentWidth={640} scroll>
       <View style={styles.hero}>
         <View style={styles.heroIcon}>
-          <AssetIcon color={theme.colors.text.primary} name="orderPlaced" size={28} />
+          <AssetIcon color={theme.colors.text.primary} name="orderPlaced" size={26} />
         </View>
-        <Text style={styles.eyebrow}>AVISHU / ORDER CONFIRMED</Text>
-        <Text style={styles.title}>Order confirmed</Text>
-        <Text style={styles.subtitle}>
-          Your payment is confirmed and the boutique support thread is now the next step for updates.
-        </Text>
+        <Text style={styles.eyebrow}>{copy.checkout.orderConfirmedEyebrow}</Text>
+        <Text style={styles.title}>{copy.checkout.orderConfirmedTitle}</Text>
+        <Text style={styles.subtitle}>{copy.checkout.orderConfirmedSubtitle}</Text>
       </View>
 
       <View style={styles.summaryCard}>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Pieces</Text>
+          <Text style={styles.summaryLabel}>{copy.checkout.pieces}</Text>
           <Text style={styles.summaryValue}>{lastReceipt.itemCount}</Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Payment</Text>
-          <Text style={styles.summaryValue}>Kaspi Pay</Text>
+          <Text style={styles.summaryLabel}>{copy.checkout.payment}</Text>
+          <Text style={styles.summaryValue}>{copy.checkout.paymentTitle}</Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Delivery</Text>
-          <Text style={styles.summaryValue}>{formatDeliveryMethod(lastReceipt.deliveryMethod)}</Text>
+          <Text style={styles.summaryLabel}>{copy.checkout.delivery}</Text>
+          <Text style={styles.summaryValue}>{formatDeliveryMethodLabel(lastReceipt.deliveryMethod)}</Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Total</Text>
+          <Text style={styles.summaryLabel}>{copy.checkout.total}</Text>
           <Text style={styles.summaryTotal}>{formatCurrency(lastReceipt.total)}</Text>
         </View>
       </View>
 
       <View style={styles.itemPanel}>
-        <Text style={styles.panelEyebrow}>Confirmed items</Text>
-        {lastReceipt.items.map((item) => (
-          <View key={`${item.productName}-${item.size}-${item.colorLabel}`} style={styles.itemRow}>
+        <Text style={styles.panelEyebrow}>{copy.checkout.confirmedItems}</Text>
+        {lastReceipt.items.map((item, index) => (
+          <View key={`${item.productName}-${item.size}-${item.colorLabel}-${index}`} style={styles.itemRow}>
             <Text style={styles.itemName}>{item.productName}</Text>
-            <Text style={styles.itemMeta}>{[item.colorLabel, item.size].filter(Boolean).join(' / ') || 'Selected piece'}</Text>
+            <Text style={styles.itemMeta}>
+              {[item.colorLabel, item.size].filter(Boolean).join(' / ') || copy.checkout.lineFallback}
+            </Text>
           </View>
         ))}
       </View>
 
       <View style={styles.actions}>
         <Button
-          label="Open orders"
+          label={copy.checkout.openOrders}
           onPress={() => {
             clearReceipt();
             router.replace('/customer/orders');
@@ -76,7 +78,7 @@ export default function CheckoutSuccessScreen() {
           style={styles.actionButton}
         />
         <Button
-          label="Continue shopping"
+          label={copy.checkout.continueShopping}
           onPress={() => {
             clearReceipt();
             router.replace('/customer');
@@ -134,6 +136,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: theme.colors.surface.default,
     borderColor: theme.colors.border.subtle,
+    borderRadius: 999,
     borderWidth: theme.borders.width.thin,
     height: 56,
     justifyContent: 'center',

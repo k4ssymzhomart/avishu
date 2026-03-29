@@ -1,19 +1,8 @@
-import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { Divider } from '@/components/ui/Divider';
 import { theme } from '@/lib/theme/tokens';
-
-type ReactNativeMapsModule = typeof import('react-native-maps');
-
-let ReactNativeMaps: ReactNativeMapsModule | null = null;
-
-if (Platform.OS !== 'web') {
-  ReactNativeMaps = require('react-native-maps') as ReactNativeMapsModule;
-}
-
-const MapView = ReactNativeMaps?.default;
-const Marker = ReactNativeMaps?.Marker;
-const PROVIDER_GOOGLE = ReactNativeMaps?.PROVIDER_GOOGLE;
+import { MapView, Marker, PROVIDER_GOOGLE } from './Map';
 
 const grayscaleMapStyle = [
   { elementType: 'geometry', stylers: [{ color: '#151515' }] },
@@ -40,29 +29,32 @@ const karagandaRegion = {
 const branches = [
   {
     activeOrders: 12,
-    availability: 86,
     coordinate: { latitude: 49.8003, longitude: 73.0878 },
     id: 'KRG-01',
+    metricLabel: 'Live',
+    metricValue: '12',
     name: 'Citymall',
-    ready: 3,
+    status: 'Stable',
     zone: 'Bukhar-Zhyrau',
   },
   {
     activeOrders: 8,
-    availability: 74,
     coordinate: { latitude: 49.793, longitude: 73.0947 },
     id: 'KRG-02',
+    metricLabel: 'Ready',
+    metricValue: '2',
     name: 'Railway',
-    ready: 2,
+    status: 'Handoff',
     zone: 'Central station',
   },
   {
     activeOrders: 5,
-    availability: 91,
     coordinate: { latitude: 49.8119, longitude: 73.1285 },
     id: 'KRG-03',
+    metricLabel: 'Service',
+    metricValue: '91%',
     name: 'South-East',
-    ready: 1,
+    status: 'Courier',
     zone: 'Republic Ave',
   },
 ] as const;
@@ -79,7 +71,6 @@ export function FranchiseeBranchMap() {
             <Text style={styles.mapEyebrow}>Karaganda branch grid</Text>
             <Text style={styles.mapTitle}>Live branch footprint</Text>
           </View>
-          <Text style={styles.mapMeta}>3 nodes online</Text>
         </View>
 
         <View style={styles.mapFrame}>
@@ -124,92 +115,84 @@ export function FranchiseeBranchMap() {
         </View>
       </View>
 
-      <View style={styles.branchList}>
-        {branches.map((branch, index) => (
-          <View key={branch.id} style={styles.branchCard}>
-            <View style={styles.branchHeader}>
-              <View style={styles.branchCopy}>
-                <Text style={styles.branchIndex}>{`0${index + 1}`}</Text>
-                <Text style={styles.branchName}>{branch.name}</Text>
-                <Text style={styles.branchZone}>{branch.zone}</Text>
-              </View>
-              <Text style={styles.branchAvailability}>{`${branch.availability}%`}</Text>
-            </View>
+      <View style={styles.branchPanel}>
+        <View style={styles.branchPanelCopy}>
+          <Text style={styles.branchPanelLabel}>Branches</Text>
+          <Text style={styles.branchPanelBody}>A contained mock node window for local handoff context.</Text>
+        </View>
 
-            <Divider />
+        <View style={styles.branchList}>
+          {branches.map((branch, index) => (
+            <View key={branch.id}>
+              {index ? <Divider /> : null}
+              <View style={styles.branchRow}>
+                <View style={styles.branchRowCopy}>
+                  <View style={styles.branchRowTop}>
+                    <Text style={styles.branchName}>{branch.name}</Text>
+                    <View style={styles.statusChip}>
+                      <Text style={styles.statusChipLabel}>{branch.status}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.branchZone}>{branch.zone}</Text>
+                </View>
 
-            <View style={styles.branchMetrics}>
-              <View style={styles.branchMetricCell}>
-                <Text style={styles.branchMetricLabel}>Availability</Text>
-                <Text style={styles.branchMetricValue}>{`${branch.availability}%`}</Text>
-              </View>
-              <View style={styles.branchMetricCell}>
-                <Text style={styles.branchMetricLabel}>Active</Text>
-                <Text style={styles.branchMetricValue}>{branch.activeOrders.toString().padStart(2, '0')}</Text>
-              </View>
-              <View style={styles.branchMetricCell}>
-                <Text style={styles.branchMetricLabel}>Ready</Text>
-                <Text style={styles.branchMetricValue}>{branch.ready.toString().padStart(2, '0')}</Text>
+                <View style={styles.branchMetric}>
+                  <Text style={styles.branchMetricValue}>{branch.metricValue}</Text>
+                  <Text style={styles.branchMetricLabel}>{branch.metricLabel}</Text>
+                </View>
               </View>
             </View>
-          </View>
-        ))}
+          ))}
+        </View>
+
+        <View style={styles.branchFooter}>
+          <Text style={styles.branchFooterLabel}>Pipeline held</Text>
+          <Text style={styles.branchFooterValue}>{branches.reduce((sum, branch) => sum + branch.activeOrders, 0)}</Text>
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  branchAvailability: {
-    color: theme.colors.text.primary,
-    fontFamily: theme.typography.family.display,
-    fontSize: theme.typography.size.lg,
-    lineHeight: theme.typography.lineHeight.lg,
-  },
-  branchCard: {
-    backgroundColor: theme.colors.surface.default,
+  branchFooter: {
+    backgroundColor: theme.colors.surface.muted,
     borderColor: theme.colors.border.subtle,
-    borderRadius: theme.borders.radius.md,
+    borderRadius: theme.borders.radius.sm,
     borderWidth: theme.borders.width.thin,
-    gap: theme.spacing.md,
-    padding: theme.spacing.lg,
-  },
-  branchCopy: {
-    flex: 1,
-    gap: theme.spacing.xs,
-  },
-  branchHeader: {
-    alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: theme.spacing.md,
     justifyContent: 'space-between',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
   },
-  branchIndex: {
+  branchFooterLabel: {
     color: theme.colors.text.secondary,
     fontSize: theme.typography.size.xs,
     fontWeight: theme.typography.weight.medium,
     letterSpacing: theme.typography.tracking.widest,
     textTransform: 'uppercase',
   },
-  branchList: {
-    gap: theme.spacing.md,
+  branchFooterValue: {
+    color: theme.colors.text.primary,
+    fontFamily: theme.typography.family.display,
+    fontSize: theme.typography.size.lg,
+    lineHeight: theme.typography.lineHeight.lg,
   },
-  branchMetricCell: {
-    backgroundColor: theme.colors.surface.muted,
+  branchList: {
     borderColor: theme.colors.border.subtle,
     borderRadius: theme.borders.radius.sm,
     borderWidth: theme.borders.width.thin,
-    flex: 1,
-    gap: theme.spacing.xs,
-    minHeight: 76,
-    minWidth: 92,
-    padding: theme.spacing.md,
+    overflow: 'hidden',
+  },
+  branchMetric: {
+    alignItems: 'flex-end',
+    gap: 2,
   },
   branchMetricLabel: {
     color: theme.colors.text.secondary,
     fontSize: theme.typography.size.xs,
     fontWeight: theme.typography.weight.medium,
-    letterSpacing: theme.typography.tracking.widest,
+    letterSpacing: theme.typography.tracking.wide,
     textTransform: 'uppercase',
   },
   branchMetricValue: {
@@ -218,16 +201,54 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.size.lg,
     lineHeight: theme.typography.lineHeight.lg,
   },
-  branchMetrics: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
   branchName: {
     color: theme.colors.text.primary,
     fontFamily: theme.typography.family.display,
-    fontSize: theme.typography.size.xl,
-    lineHeight: theme.typography.lineHeight.xl,
+    fontSize: theme.typography.size.lg,
+    lineHeight: theme.typography.lineHeight.lg,
+  },
+  branchPanel: {
+    backgroundColor: theme.colors.surface.default,
+    borderColor: theme.colors.border.subtle,
+    borderRadius: theme.borders.radius.md,
+    borderWidth: theme.borders.width.thin,
+    gap: theme.spacing.lg,
+    minWidth: 308,
+    padding: theme.spacing.lg,
+  },
+  branchPanelBody: {
+    color: theme.colors.text.secondary,
+    fontSize: theme.typography.size.sm,
+    lineHeight: theme.typography.lineHeight.sm,
+  },
+  branchPanelCopy: {
+    gap: theme.spacing.xs,
+  },
+  branchPanelLabel: {
+    color: theme.colors.text.primary,
+    fontSize: theme.typography.size.sm,
+    fontWeight: theme.typography.weight.semibold,
+    letterSpacing: theme.typography.tracking.widest,
+    textTransform: 'uppercase',
+  },
+  branchRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  branchRowCopy: {
+    flex: 1,
+    gap: 4,
+    marginRight: theme.spacing.md,
+  },
+  branchRowTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
   },
   branchZone: {
     color: theme.colors.text.secondary,
@@ -289,13 +310,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     justifyContent: 'space-between',
   },
-  mapMeta: {
-    color: theme.colors.text.inverseMuted,
-    fontSize: theme.typography.size.xs,
-    fontWeight: theme.typography.weight.medium,
-    letterSpacing: theme.typography.tracking.wide,
-    textTransform: 'uppercase',
-  },
   mapOverlay: {
     left: theme.spacing.md,
     position: 'absolute',
@@ -345,7 +359,22 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
   shellWide: {
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
     flexDirection: 'row',
+  },
+  statusChip: {
+    backgroundColor: theme.colors.surface.muted,
+    borderColor: theme.colors.border.subtle,
+    borderRadius: 999,
+    borderWidth: theme.borders.width.thin,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+  },
+  statusChipLabel: {
+    color: theme.colors.text.primary,
+    fontSize: 10,
+    fontWeight: theme.typography.weight.medium,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
 });

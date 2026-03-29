@@ -2,23 +2,20 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { useRouter } from 'expo-router';
-import {
-  ImageBackground,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { ImageBackground, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 
+import { CustomerLoyaltySummary } from '@/components/customer/CustomerLoyaltySummary';
+import { AssetIcon, type AssetIconName } from '@/components/icons/AssetIcon';
 import { Screen } from '@/components/layout/Screen';
 import { RoleBottomNav } from '@/components/navigation/RoleBottomNav';
 import { Button } from '@/components/ui/Button';
-import { customerBottomNav } from '@/lib/constants/navigation';
+import { useCustomerI18n } from '@/hooks/useCustomerI18n';
+import { useFranchises } from '@/hooks/useFranchises';
+import { useCustomerOrders } from '@/hooks/useOrders';
+import { demoUsersByRole } from '@/lib/constants/demo';
 import { theme } from '@/lib/theme/tokens';
 import { formatCurrency } from '@/lib/utils/format';
-import { useCustomerOrders } from '@/hooks/useOrders';
+import { buildLoyaltySummary } from '@/lib/utils/loyalty';
 import { updateCustomerProfile } from '@/services/customerProfile';
 import { useSessionStore } from '@/store/session';
 
@@ -32,7 +29,7 @@ function getLayout(width: number) {
   const columns = isDesktop ? 2 : 1;
   const panelWidth = columns > 1 ? (contentWidth - gap * (columns - 1)) / columns : contentWidth;
 
-  return { gap, isDesktop, maxContentWidth, panelWidth };
+  return { gap, maxContentWidth, panelWidth };
 }
 
 function ProfilePanel({
@@ -61,6 +58,51 @@ function ProfilePanel({
   );
 }
 
+function ProfileRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: AssetIconName;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.detailRow}>
+      <View style={styles.detailIcon}>
+        <AssetIcon color={theme.colors.text.primary} name={icon} size={15} />
+      </View>
+      <View style={styles.detailCopy}>
+        <Text style={styles.detailLabel}>{label}</Text>
+        <Text style={styles.detailValue}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
+function LanguageChip({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.languageChip,
+        active ? styles.languageChipActive : null,
+        pressed ? styles.languageChipPressed : null,
+      ]}
+    >
+      <Text style={[styles.languageChipLabel, active ? styles.languageChipLabelActive : null]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export default function CustomerProfileScreen() {
   const router = useRouter();
   const currentUserId = useSessionStore((state) => state.currentUserId);
@@ -70,6 +112,8 @@ export default function CustomerProfileScreen() {
   const signOut = useSessionStore((state) => state.signOut);
   const updateCurrentUserName = useSessionStore((state) => state.updateCurrentUserName);
   const { activeOrders, orderHistory } = useCustomerOrders(currentUserId);
+  const { copy, language, navItems, setLanguage } = useCustomerI18n();
+  const { franchises } = useFranchises();
   const [nickname, setNickname] = useState(currentUserName ?? '');
   const [isEditingName, setIsEditingName] = useState(false);
   const { width } = useWindowDimensions();
@@ -80,19 +124,23 @@ export default function CustomerProfileScreen() {
   }, [currentUserName]);
 
   const totalOrders = activeOrders.length + orderHistory.length;
-  const lifetimeValue = [...activeOrders, ...orderHistory].reduce((sum, order) => sum + order.productPrice, 0);
-  const loyalty = currentUserProfile?.loyalty ?? {
-    currentTier: 'Slate',
-    nextTier: 'Monolith',
-    nextTierProgress: 0,
-    points: 0,
-    pointsToNextTier: 800,
-  };
+  const completedOrders = orderHistory.filter((order) => order.status === 'delivered');
+  const loyalty =
+    currentUserProfile?.loyalty ??
+    buildLoyaltySummary({
+      lifetimeSpent: completedOrders.reduce((sum, order) => sum + order.productPrice, 0),
+      totalOrders: completedOrders.length,
+    });
   const savedAddresses = currentUserProfile?.addresses ?? [];
+  const selectedFranchiseId = currentUserProfile?.assignedFranchiseId ?? demoUsersByRole.customer.franchiseId ?? null;
+  const profileName = currentUserName ?? (language === 'ru' ? 'РљР»РёРµРЅС‚ AVISHU' : 'AVISHU Client');
+  const nextTierValue = loyalty.nextTier
+    ? `${loyalty.pointsToNextTier} ${copy.profile.pointsUntil} ${loyalty.nextTier}`
+    : `You reached ${loyalty.tier}`;
 
   return (
     <Screen
-      footer={<RoleBottomNav activeKey="profile" items={customerBottomNav} variant="floating" />}
+      footer={<RoleBottomNav activeKey="profile" items={navItems} variant="floating" />}
       footerMaxWidth={540}
       footerMode="floating"
       maxContentWidth={layout.maxContentWidth}
@@ -100,13 +148,13 @@ export default function CustomerProfileScreen() {
     >
       <ImageBackground imageStyle={styles.heroImage} source={profileBackdrop} style={styles.hero}>
         <View style={styles.heroOverlay}>
-          <Text style={styles.heroEyebrow}>AVISHU / PROFILE</Text>
+          <Text style={styles.heroEyebrow}>{copy.profile.profileTitle}</Text>
           <View style={styles.identityRow}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{currentUserName ? currentUserName.charAt(0).toUpperCase() : 'A'}</Text>
+              <Text style={styles.avatarText}>{profileName.charAt(0).toUpperCase()}</Text>
             </View>
             <View style={styles.identityCopy}>
-              <Text style={styles.identityName}>{currentUserName ?? 'AVISHU Client'}</Text>
+              <Text style={styles.identityName}>{profileName}</Text>
               <Text style={styles.identityPhone}>{currentUserPhoneNumber ?? '+7 *** *** ** **'}</Text>
             </View>
           </View>
@@ -114,64 +162,47 @@ export default function CustomerProfileScreen() {
           <View style={styles.heroStats}>
             <View style={styles.heroStat}>
               <Text style={styles.heroStatValue}>{totalOrders}</Text>
-              <Text style={styles.heroStatLabel}>Orders</Text>
+              <Text style={styles.heroStatLabel}>{copy.profile.orders}</Text>
             </View>
             <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>{loyalty.currentTier}</Text>
-              <Text style={styles.heroStatLabel}>Tier</Text>
+              <Text style={styles.heroStatValue}>{loyalty.tier}</Text>
+              <Text style={styles.heroStatLabel}>{copy.profile.tier}</Text>
             </View>
             <View style={styles.heroStat}>
               <Text style={styles.heroStatValue}>{loyalty.points}</Text>
-              <Text style={styles.heroStatLabel}>Points</Text>
+              <Text style={styles.heroStatLabel}>{copy.profile.points}</Text>
             </View>
           </View>
 
-          <View style={styles.loyaltyCard}>
-            <View style={styles.loyaltyHeader}>
-              <Text style={styles.loyaltyEyebrow}>AVISHU Circle</Text>
-              <Text style={styles.loyaltyTier}>{loyalty.currentTier}</Text>
-            </View>
-            <Text style={styles.loyaltyBody}>
-              {loyalty.pointsToNextTier
-                ? `${loyalty.pointsToNextTier} points until ${loyalty.nextTier}.`
-                : 'You have reached the highest loyalty tier.'}
-            </Text>
-            <View style={styles.loyaltyTrack}>
-              <View style={[styles.loyaltyFill, { width: `${loyalty.nextTierProgress * 100}%` }]} />
-            </View>
-            <View style={styles.loyaltyMetaRow}>
-              <Text style={styles.loyaltyMeta}>{`${loyalty.points} points`}</Text>
-              <Text style={styles.loyaltyMeta}>{loyalty.nextTier ?? 'Top tier reached'}</Text>
-            </View>
-          </View>
+          <CustomerLoyaltySummary loyalty={loyalty} pointsUntilLabel={copy.profile.pointsUntil} />
         </View>
       </ImageBackground>
 
       <View style={[styles.grid, { gap: layout.gap }]}>
         <View style={{ width: layout.panelWidth }}>
           <ProfilePanel
-            actionLabel={isEditingName ? 'Cancel' : 'Edit'}
+            actionLabel={isEditingName ? copy.profile.cancel : copy.profile.edit}
             onActionPress={() => {
               if (isEditingName) {
                 setNickname(currentUserName ?? '');
               }
               setIsEditingName((current) => !current);
             }}
-            title="Display details"
+            title={copy.profile.displayDetails}
           >
             {isEditingName ? (
               <View style={styles.editBlock}>
-                <Text style={styles.fieldLabel}>Display name</Text>
+                <Text style={styles.fieldLabel}>{copy.profile.displayName}</Text>
                 <TextInput
                   autoCapitalize="words"
                   onChangeText={setNickname}
-                  placeholder="Your name"
+                  placeholder={copy.profile.displayNamePlaceholder}
                   placeholderTextColor={theme.colors.text.tertiary}
                   style={styles.fieldInput}
                   value={nickname}
                 />
                 <Button
-                  label="Save name"
+                  label={copy.profile.saveName}
                   onPress={() => {
                     updateCurrentUserName(nickname);
                     if (currentUserId) {
@@ -186,87 +217,121 @@ export default function CustomerProfileScreen() {
               </View>
             ) : (
               <View style={styles.detailList}>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Display name</Text>
-                  <Text style={styles.detailValue}>{currentUserName ?? 'AVISHU Client'}</Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Phone</Text>
-                  <Text style={styles.detailValue}>{currentUserPhoneNumber ?? '+7 *** *** ** **'}</Text>
-                </View>
+                <ProfileRow icon="profile" label={copy.profile.displayName} value={profileName} />
+                <ProfileRow icon="phone" label={copy.profile.phone} value={currentUserPhoneNumber ?? '+7 *** *** ** **'} />
               </View>
             )}
           </ProfilePanel>
         </View>
 
         <View style={{ width: layout.panelWidth }}>
-          <ProfilePanel title="Loyalty summary">
+          <ProfilePanel title={copy.profile.loyaltySummary}>
             <View style={styles.detailList}>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Current tier</Text>
-                <Text style={styles.detailValue}>{loyalty.currentTier}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Current points</Text>
-                <Text style={styles.detailValue}>{loyalty.points}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Next tier</Text>
-                <Text style={styles.detailValue}>
-                  {loyalty.nextTier ? `${loyalty.pointsToNextTier} pts to ${loyalty.nextTier}` : 'Top tier reached'}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Lifetime value</Text>
-                <Text style={styles.detailValue}>{formatCurrency(lifetimeValue)}</Text>
-              </View>
+              <ProfileRow icon="crown" label={copy.profile.currentTier} value={loyalty.tier} />
+              <ProfileRow icon="badgeCheck" label="Membership" value={loyalty.benefits.label} />
+              <ProfileRow icon="award" label={copy.profile.currentPoints} value={`${loyalty.points}`} />
+              <ProfileRow icon="trendingUp" label={copy.profile.nextTier} value={nextTierValue} />
+              <ProfileRow icon="wallet" label={copy.profile.lifetimeValue} value={formatCurrency(loyalty.lifetimeSpent)} />
+              <ProfileRow
+                icon="bag"
+                label="Future benefit"
+                value={loyalty.benefits.discountPercent ? `${loyalty.benefits.discountPercent}% OFF` : 'Points accumulation'}
+              />
             </View>
           </ProfilePanel>
         </View>
 
         <View style={{ width: layout.panelWidth }}>
-          <ProfilePanel title="Saved addresses">
+          <ProfilePanel title={copy.profile.savedAddresses}>
             <View style={styles.detailList}>
               {savedAddresses.length ? (
                 savedAddresses.map((address) => (
-                  <View key={address.id} style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>{address.label}</Text>
-                    <Text style={styles.detailValue}>
-                      {[address.line1, address.line2, address.city].filter(Boolean).join(', ')}
-                    </Text>
-                  </View>
+                  <ProfileRow
+                    key={address.id}
+                    icon="address"
+                    label={address.label}
+                    value={[address.line1, address.line2, address.city].filter(Boolean).join(', ')}
+                  />
                 ))
               ) : (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Address</Text>
-                  <Text style={styles.detailValue}>Saved delivery addresses will appear here once added.</Text>
-                </View>
+                <ProfileRow icon="address" label={copy.profile.address} value={copy.profile.savedAddressesEmpty} />
               )}
             </View>
           </ProfilePanel>
         </View>
 
         <View style={{ width: layout.panelWidth }}>
-          <ProfilePanel title="Preferences">
+          <ProfilePanel title="Assigned boutique">
+            <View style={styles.branchList}>
+              {franchises.map((franchise) => {
+                const isSelected = franchise.id === selectedFranchiseId;
+
+                return (
+                  <Pressable
+                    key={franchise.id}
+                    onPress={() => {
+                      if (!currentUserId) {
+                        return;
+                      }
+
+                      void updateCustomerProfile(currentUserId, {
+                        assignedFranchiseId: franchise.id,
+                        assignedFranchiseName: franchise.name,
+                      });
+                    }}
+                    style={({ pressed }) => [
+                      styles.branchCard,
+                      isSelected ? styles.branchCardActive : null,
+                      pressed ? styles.branchCardPressed : null,
+                    ]}
+                  >
+                    <Text style={[styles.branchTitle, isSelected ? styles.branchTitleActive : null]}>{franchise.name}</Text>
+                    <Text style={[styles.branchMeta, isSelected ? styles.branchMetaActive : null]}>
+                      {`${franchise.location} / ${franchise.address}`}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ProfilePanel>
+        </View>
+
+        <View style={{ width: layout.panelWidth }}>
+          <ProfilePanel title={copy.profile.preferences}>
             <View style={styles.detailList}>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Notifications</Text>
-                <Text style={styles.detailValue}>Enabled for order updates</Text>
+              <ProfileRow icon="alarm" label={copy.profile.notifications} value={copy.profile.notificationsEnabled} />
+              <ProfileRow icon="ruler" label={copy.profile.sizeProfile} value={copy.profile.sizeProfileStored} />
+            </View>
+          </ProfilePanel>
+        </View>
+
+        <View style={{ width: layout.panelWidth }}>
+          <ProfilePanel title={copy.profile.settings}>
+            <View style={styles.settingsBlock}>
+              <View style={styles.settingsRow}>
+                <View style={styles.settingsIcon}>
+                  <AssetIcon color={theme.colors.text.primary} name="language" size={16} />
+                </View>
+                <View style={styles.settingsCopy}>
+                  <Text style={styles.detailLabel}>{copy.profile.language}</Text>
+                  <Text style={styles.detailValue}>{copy.profile.languageHint}</Text>
+                </View>
               </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Size profile</Text>
-                <Text style={styles.detailValue}>Stored in checkout history</Text>
+
+              <View style={styles.languageRow}>
+                <LanguageChip active={language === 'ru'} label={copy.profile.russian} onPress={() => setLanguage('ru')} />
+                <LanguageChip active={language === 'en'} label={copy.profile.english} onPress={() => setLanguage('en')} />
               </View>
             </View>
           </ProfilePanel>
         </View>
 
         <View style={{ width: layout.panelWidth }}>
-          <ProfilePanel title="Support">
+          <ProfilePanel title={copy.profile.support}>
             <View style={styles.supportActions}>
-              <Button label="Open chat" onPress={() => router.push('/customer/chat')} size="sm" style={styles.actionButton} />
+              <Button label={copy.profile.openChat} onPress={() => router.push('/customer/chat')} size="sm" style={styles.actionButton} />
               <Button
-                label="Notifications"
+                label={copy.profile.openNotifications}
                 onPress={() => router.push('/customer/notifications')}
                 size="sm"
                 style={styles.actionButton}
@@ -278,7 +343,7 @@ export default function CustomerProfileScreen() {
       </View>
 
       <Button
-        label="Sign out"
+        label={copy.profile.signOut}
         onPress={() => {
           signOut();
           router.replace('/splash');
@@ -308,6 +373,54 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.size.xxl,
     lineHeight: theme.typography.lineHeight.xxl,
   },
+  branchCard: {
+    backgroundColor: theme.colors.surface.muted,
+    borderColor: theme.colors.border.subtle,
+    borderWidth: theme.borders.width.thin,
+    gap: 4,
+    padding: theme.spacing.md,
+  },
+  branchCardActive: {
+    backgroundColor: theme.colors.surface.inverse,
+    borderColor: theme.colors.border.strong,
+  },
+  branchCardPressed: {
+    opacity: 0.84,
+  },
+  branchList: {
+    gap: theme.spacing.sm,
+  },
+  branchMeta: {
+    color: theme.colors.text.secondary,
+    fontSize: theme.typography.size.sm,
+    lineHeight: theme.typography.lineHeight.sm,
+  },
+  branchMetaActive: {
+    color: theme.colors.text.inverseMuted,
+  },
+  branchTitle: {
+    color: theme.colors.text.primary,
+    fontFamily: theme.typography.family.display,
+    fontSize: theme.typography.size.lg,
+    lineHeight: theme.typography.lineHeight.lg,
+  },
+  branchTitleActive: {
+    color: theme.colors.text.inverse,
+  },
+  detailCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  detailIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface.default,
+    borderColor: theme.colors.border.subtle,
+    borderRadius: 999,
+    borderWidth: theme.borders.width.thin,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
   detailLabel: {
     color: theme.colors.text.secondary,
     fontSize: theme.typography.size.xs,
@@ -319,10 +432,12 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   detailRow: {
+    alignItems: 'flex-start',
     backgroundColor: theme.colors.surface.muted,
     borderColor: theme.colors.border.subtle,
     borderWidth: theme.borders.width.thin,
-    gap: 4,
+    flexDirection: 'row',
+    gap: theme.spacing.md,
     padding: theme.spacing.md,
   },
   detailValue: {
@@ -414,55 +529,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.md,
   },
-  loyaltyBody: {
-    color: theme.colors.text.secondary,
-    fontSize: theme.typography.size.sm,
-    lineHeight: theme.typography.lineHeight.sm,
-  },
-  loyaltyCard: {
-    backgroundColor: 'rgba(255,255,255,0.72)',
-    borderColor: 'rgba(17,17,17,0.08)',
-    borderWidth: theme.borders.width.thin,
-    gap: theme.spacing.sm,
-    padding: theme.spacing.lg,
-  },
-  loyaltyEyebrow: {
-    color: theme.colors.text.secondary,
-    fontSize: theme.typography.size.xs,
-    fontWeight: theme.typography.weight.medium,
-    letterSpacing: theme.typography.tracking.widest,
-    textTransform: 'uppercase',
-  },
-  loyaltyFill: {
-    backgroundColor: theme.colors.surface.inverse,
-    height: '100%',
-  },
-  loyaltyHeader: {
+  languageChip: {
     alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: theme.colors.surface.default,
+    borderColor: theme.colors.border.subtle,
+    borderWidth: theme.borders.width.thin,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: theme.spacing.md,
   },
-  loyaltyMeta: {
-    color: theme.colors.text.secondary,
+  languageChipActive: {
+    backgroundColor: theme.colors.surface.inverse,
+    borderColor: theme.colors.border.strong,
+  },
+  languageChipLabel: {
+    color: theme.colors.text.primary,
     fontSize: theme.typography.size.xs,
-    fontWeight: theme.typography.weight.medium,
-    letterSpacing: theme.typography.tracking.widest,
+    fontWeight: theme.typography.weight.semibold,
+    letterSpacing: theme.typography.tracking.wide,
     textTransform: 'uppercase',
   },
-  loyaltyMetaRow: {
+  languageChipLabelActive: {
+    color: theme.colors.text.inverse,
+  },
+  languageChipPressed: {
+    opacity: 0.84,
+  },
+  languageRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  loyaltyTier: {
-    color: theme.colors.text.primary,
-    fontFamily: theme.typography.family.display,
-    fontSize: theme.typography.size.lg,
-    lineHeight: theme.typography.lineHeight.lg,
-  },
-  loyaltyTrack: {
-    backgroundColor: 'rgba(17,17,17,0.12)',
-    height: 6,
-    overflow: 'hidden',
+    gap: theme.spacing.sm,
   },
   panel: {
     backgroundColor: theme.colors.surface.default,
@@ -488,6 +584,28 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.family.display,
     fontSize: theme.typography.size.lg,
     lineHeight: theme.typography.lineHeight.lg,
+  },
+  settingsBlock: {
+    gap: theme.spacing.md,
+  },
+  settingsCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  settingsIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface.default,
+    borderColor: theme.colors.border.subtle,
+    borderRadius: 999,
+    borderWidth: theme.borders.width.thin,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  settingsRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
   },
   supportActions: {
     gap: theme.spacing.sm,

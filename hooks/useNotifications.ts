@@ -25,7 +25,12 @@ function ensureNotificationsSubscription(cacheKey: string, userId: string) {
   );
 }
 
-export function useUserNotifications(userId: string | null) {
+type UseUserNotificationsOptions = {
+  markRead?: boolean;
+};
+
+export function useUserNotifications(userId: string | null, options?: UseUserNotificationsOptions) {
+  const markRead = options?.markRead ?? true;
   const cacheKey = useMemo(() => (userId ? `user-notifications:${userId}` : null), [userId]);
   const [notifications, setNotifications] = useState<AppNotification[]>(() =>
     cacheKey ? notificationsCache.get(cacheKey) ?? [] : [],
@@ -72,7 +77,7 @@ export function useUserNotifications(userId: string | null) {
   }, [cacheKey, userId]);
 
   useEffect(() => {
-    if (!userId) {
+    if (!userId || !markRead) {
       return;
     }
 
@@ -83,7 +88,7 @@ export function useUserNotifications(userId: string | null) {
     }
 
     void markNotificationsRead(userId, unreadIds);
-  }, [notifications, userId]);
+  }, [markRead, notifications, userId]);
 
   return {
     isLoading,

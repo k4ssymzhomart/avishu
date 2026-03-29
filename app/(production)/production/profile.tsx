@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { ProductionHeaderNotificationAction } from '@/components/production/ProductionHeaderNotificationAction';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Screen } from '@/components/layout/Screen';
 import { RoleBottomNav } from '@/components/navigation/RoleBottomNav';
@@ -33,6 +34,7 @@ export default function ProductionProfileScreen() {
       scroll
     >
       <AppHeader
+        actionSlot={<ProductionHeaderNotificationAction />}
         eyebrow="AVISHU / PRODUCTION"
         subtitle="A compact workshop profile with live board totals, real production scope, and quick session controls."
         title={profileName}

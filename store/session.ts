@@ -4,13 +4,12 @@ import { demoUsersByRole } from '@/lib/constants/demo';
 import { buildPhoneUserName, formatPhoneNumberForDisplay } from '@/lib/utils/phone';
 import {
   bootstrapFirebaseDemoAuth,
-  isDemoPhoneAuthEnabled,
   type PhoneVerificationOptions,
   requestPhoneVerification,
   signOutFirebaseSession,
   verifyPhoneOtp,
 } from '@/services/auth';
-import { ensureUserProfile, getUserProfile } from '@/services/users';
+import { findRegisteredUser, registerUserProfile } from '@/services/users';
 import type { AuthMethod, AuthStatus } from '@/types/auth';
 import type { CustomerProfile } from '@/types/customerProfile';
 import type { UserRole } from '@/types/user';
@@ -26,7 +25,7 @@ type SessionState = {
   authMethod: AuthMethod | null;
   authStatus: AuthStatus;
   beginPhoneAuth: (phoneNumber?: string, options?: PhoneVerificationOptions) => Promise<void>;
-  completeRoleSelection: (role: UserRole, displayName?: string) => void;
+  completeRoleSelection: (role: UserRole, displayName?: string) => Promise<void>;
   currentRole: UserRole | null;
   currentUserId: string | null;
   currentUserName: string | null;
@@ -72,6 +71,45 @@ function clearPendingPhoneState() {
   };
 }
 
+function getRoleRegistrationDefaults(role: UserRole, currentUserId: string, resolvedName: string) {
+  if (role === 'franchisee') {
+    return {
+      branchAddress: demoUsersByRole.franchisee.branchAddress ?? null,
+      branchId: demoUsersByRole.franchisee.branchId ?? currentUserId,
+      branchName: demoUsersByRole.franchisee.branchName ?? resolvedName,
+      franchiseId: demoUsersByRole.franchisee.franchiseId ?? demoUsersByRole.franchisee.id,
+      franchiseName: demoUsersByRole.franchisee.franchiseName ?? demoUsersByRole.franchisee.branchName ?? resolvedName,
+      linkedFranchiseIds: demoUsersByRole.franchisee.linkedFranchiseIds ?? [demoUsersByRole.franchisee.id],
+      productionUnitId: null,
+      productionUnitName: null,
+    };
+  }
+
+  if (role === 'production') {
+    return {
+      branchAddress: null,
+      branchId: null,
+      branchName: null,
+      franchiseId: null,
+      franchiseName: null,
+      linkedFranchiseIds: demoUsersByRole.production.linkedFranchiseIds ?? [demoUsersByRole.franchisee.id],
+      productionUnitId: demoUsersByRole.production.productionUnitId ?? null,
+      productionUnitName: demoUsersByRole.production.productionUnitName ?? resolvedName,
+    };
+  }
+
+  return {
+    branchAddress: null,
+    branchId: null,
+    branchName: null,
+    franchiseId: demoUsersByRole.customer.franchiseId ?? null,
+    franchiseName: demoUsersByRole.customer.franchiseName ?? null,
+    linkedFranchiseIds: null,
+    productionUnitId: null,
+    productionUnitName: null,
+  };
+}
+
 export const useSessionStore = create<SessionState>((set, get) => ({
   ...guestSession,
   beginPhoneAuth: async (phoneNumber, options) => {
@@ -88,54 +126,42 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       phoneEntryValue: verification.displayPhoneNumber,
     });
   },
-  completeRoleSelection: (role, displayName) => {
-    const currentUserId = get().currentUserId;
-    const currentUserPhoneNumber = get().currentUserPhoneNumber;
-    const currentUserProfile = get().currentUserProfile;
+  completeRoleSelection: async (role, displayName) => {
+    const state = get();
+    const currentUserId = state.currentUserId;
+    const currentUserPhoneNumber = state.currentUserPhoneNumber;
+    const currentUserProfile = state.currentUserProfile;
     const resolvedName =
-      displayName?.trim().length ? displayName.trim() : get().currentUserName ?? demoUsersByRole[role].name;
+      displayName?.trim().length
+        ? displayName.trim()
+        : state.currentUserName ?? buildPhoneUserName(currentUserPhoneNumber);
 
-    if (currentUserId) {
-      void ensureUserProfile({
-        branchAddress: role === 'franchisee' ? demoUsersByRole.franchisee.branchAddress ?? null : null,
-        branchId:
-          role === 'franchisee'
-            ? demoUsersByRole.franchisee.branchId ?? currentUserId
-            : null,
-        branchName:
-          role === 'franchisee'
-            ? demoUsersByRole.franchisee.branchName ?? resolvedName
-            : null,
-        id: currentUserId,
-        linkedFranchiseIds:
-          role === 'franchisee'
-            ? demoUsersByRole.franchisee.linkedFranchiseIds ?? [demoUsersByRole.franchisee.id]
-            : role === 'production'
-              ? demoUsersByRole.production.linkedFranchiseIds ?? [demoUsersByRole.franchisee.id]
-              : null,
-        name: resolvedName,
-        phoneNumber: currentUserPhoneNumber ?? null,
-        productionUnitId: role === 'production' ? demoUsersByRole.production.productionUnitId ?? null : null,
-        productionUnitName: role === 'production' ? demoUsersByRole.production.productionUnitName ?? resolvedName : null,
-        role,
-      });
+    if (!currentUserId) {
+      throw new Error('MISSING_SESSION_USER');
     }
+
+    const roleDefaults = getRoleRegistrationDefaults(role, currentUserId, resolvedName);
+    const registeredUser = await registerUserProfile({
+      ...roleDefaults,
+      id: currentUserId,
+      name: resolvedName,
+      phoneNumber: currentUserPhoneNumber ?? null,
+      role,
+    });
 
     set({
       authStatus: 'authenticated',
       currentRole: role,
-      currentUserName: resolvedName,
+      currentUserName: registeredUser.displayName,
+      currentUserPhoneNumber: registeredUser.phoneNumber ?? currentUserPhoneNumber,
       currentUserProfile:
         role === 'customer' && currentUserProfile
           ? {
-              addresses: currentUserProfile.addresses,
-              createdAt: currentUserProfile.createdAt,
-              displayName: resolvedName,
-              loyalty: currentUserProfile.loyalty,
-              phone: currentUserProfile.phone,
+              ...currentUserProfile,
+              displayName: registeredUser.displayName,
+              phone: registeredUser.phoneNumber ?? currentUserProfile.phone,
               role,
-              uid: currentUserProfile.uid,
-              updatedAt: currentUserProfile.updatedAt,
+              uid: currentUserId,
             }
           : null,
       pendingRoleSelection: null,
@@ -229,33 +255,32 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
   verifyOtpCode: async (code) => {
     const state = get();
-    const isDemoFlow = isDemoPhoneAuthEnabled();
-    const pendingPhoneNumber =
-      state.pendingPhoneNumber ?? (isDemoFlow ? state.pendingPhoneDisplayNumber ?? state.phoneEntryValue : null);
-    const pendingVerificationId = state.pendingVerificationId ?? (isDemoFlow ? pendingPhoneNumber : null);
+    const pendingPhoneNumber = state.pendingPhoneNumber;
+    const pendingVerificationId = state.pendingVerificationId;
 
     if (!pendingPhoneNumber || !pendingVerificationId) {
       throw new Error('MISSING_VERIFICATION');
     }
 
-    const user = await verifyPhoneOtp({
+    const verifiedUser = await verifyPhoneOtp({
       code,
       phoneNumber: pendingPhoneNumber,
       verificationId: pendingVerificationId,
     });
-    const existingProfile = isDemoFlow ? null : await getUserProfile(user.id).catch(() => null);
-    const restoredRole = existingProfile?.role ?? null;
+    const existingUser = await findRegisteredUser(verifiedUser.id).catch(() => null);
+    const resolvedRole = existingUser?.role ?? null;
+    const resolvedPhoneNumber = existingUser?.phoneNumber ?? verifiedUser.phoneNumber ?? pendingPhoneNumber;
 
     set({
       authMethod: 'phone',
-      authStatus: restoredRole ? 'authenticated' : 'role_pending',
-      currentRole: restoredRole,
-      currentUserId: user.id,
-      currentUserName: existingProfile?.name ?? user.name,
-      currentUserPhoneNumber: existingProfile?.phoneNumber ?? user.phoneNumber,
+      authStatus: resolvedRole ? 'authenticated' : 'role_pending',
+      currentRole: resolvedRole,
+      currentUserId: verifiedUser.id,
+      currentUserName: existingUser?.displayName ?? verifiedUser.name,
+      currentUserPhoneNumber: resolvedPhoneNumber,
       currentUserProfile: null,
       pendingRoleSelection: null,
-      phoneEntryValue: formatPhoneNumberForDisplay(existingProfile?.phoneNumber ?? user.phoneNumber),
+      phoneEntryValue: formatPhoneNumberForDisplay(resolvedPhoneNumber),
       ...clearPendingPhoneState(),
     });
   },

@@ -1,6 +1,8 @@
 import type { OrderChatMessage, OrderChatThread } from '@/types/chat';
+import type { Franchise } from '@/types/franchise';
 import type { Order } from '@/types/order';
 import type { Product } from '@/types/product';
+import type { ProductionUnit } from '@/types/productionUnit';
 import type { User, UserRole } from '@/types/user';
 
 const now = Date.now();
@@ -17,11 +19,72 @@ function daysFromNow(days: number) {
   return new Date(now + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
+export const demoFranchises: Franchise[] = [
+  {
+    activeOrdersCount: 4,
+    address: '12 Kabanbay Batyr Ave, Astana',
+    createdAt: daysAgo(240),
+    id: 'avishu-franchise-astana',
+    location: 'Astana',
+    managerName: 'Aruzhan S.',
+    name: 'AVISHU Astana Boutique',
+    phone: '+77070000002',
+    productionLinked: ['atelier-core'],
+  },
+  {
+    activeOrdersCount: 2,
+    address: '19 Dostyk Ave, Almaty',
+    createdAt: daysAgo(260),
+    id: 'avishu-franchise-almaty',
+    location: 'Almaty',
+    managerName: 'Elmira D.',
+    name: 'AVISHU Almaty Boutique',
+    phone: '+77070000012',
+    productionLinked: ['atelier-core', 'atelier-west'],
+  },
+  {
+    activeOrdersCount: 0,
+    address: '58 Tauke Khan Ave, Shymkent',
+    createdAt: daysAgo(180),
+    id: 'avishu-franchise-shymkent',
+    location: 'Shymkent',
+    managerName: 'Madina T.',
+    name: 'AVISHU Shymkent Atelier Store',
+    phone: '+77070000013',
+    productionLinked: ['atelier-west'],
+  },
+];
+
+export const demoProductionUnits: ProductionUnit[] = [
+  {
+    activeTasks: 3,
+    capacity: 28,
+    id: 'atelier-core',
+    linkedFranchises: ['avishu-franchise-astana', 'avishu-franchise-almaty'],
+    location: 'Astana',
+    name: 'AVISHU Atelier Core',
+    status: 'busy',
+    workersCount: 14,
+  },
+  {
+    activeTasks: 1,
+    capacity: 18,
+    id: 'atelier-west',
+    linkedFranchises: ['avishu-franchise-almaty', 'avishu-franchise-shymkent'],
+    location: 'Almaty',
+    name: 'AVISHU Atelier West',
+    status: 'active',
+    workersCount: 9,
+  },
+];
+
 export const demoUsersByRole: Record<UserRole, User> = {
   customer: {
     branchAddress: null,
     branchId: null,
     branchName: null,
+    franchiseId: demoFranchises[0].id,
+    franchiseName: demoFranchises[0].name,
     id: 'demo-customer',
     linkedFranchiseIds: null,
     name: 'Ainur S.',
@@ -34,6 +97,8 @@ export const demoUsersByRole: Record<UserRole, User> = {
     branchAddress: '12 Kabanbay Batyr Ave, Astana',
     branchId: 'astana-flagship',
     branchName: 'AVISHU Astana Boutique',
+    franchiseId: demoFranchises[0].id,
+    franchiseName: demoFranchises[0].name,
     id: 'avishu-franchise-astana',
     linkedFranchiseIds: ['avishu-franchise-astana'],
     name: 'AVISHU Astana',
@@ -46,12 +111,14 @@ export const demoUsersByRole: Record<UserRole, User> = {
     branchAddress: null,
     branchId: null,
     branchName: null,
+    franchiseId: null,
+    franchiseName: null,
     id: 'avishu-production-floor',
-    linkedFranchiseIds: ['avishu-franchise-astana'],
+    linkedFranchiseIds: demoProductionUnits[0].linkedFranchises,
     name: 'AVISHU Atelier',
     phoneNumber: '+77070000003',
-    productionUnitId: 'atelier-core',
-    productionUnitName: 'AVISHU Atelier Core',
+    productionUnitId: demoProductionUnits[0].id,
+    productionUnitName: demoProductionUnits[0].name,
     role: 'production',
   },
 };
@@ -79,12 +146,14 @@ export const demoWalkthroughSteps = [
 export const demoProducts: Product[] = [
   {
     availability: 'in_stock',
+    assignedBranches: demoFranchises.map((franchise) => franchise.id),
     category: 'NEW',
     colors: [
       { id: 'bone', label: 'Bone', swatch: '#D8D4CB' },
       { id: 'ash', label: 'Ash', swatch: '#C7C4BD' },
     ],
     collection: 'ALL.INN',
+    createdBy: 'admin',
     description: 'A relaxed AVISHU tee cut for a clean oversized silhouette and everyday layering.',
     fit: 'Relaxed oversized fit',
     id: 'product-all-inn-tee',
@@ -96,12 +165,14 @@ export const demoProducts: Product[] = [
   },
   {
     availability: 'in_stock',
+    assignedBranches: ['avishu-franchise-astana', 'avishu-franchise-almaty'],
     category: 'OUTERWEAR',
     colors: [
       { id: 'graphite', label: 'Graphite', swatch: '#4A4A4A' },
       { id: 'stone', label: 'Stone', swatch: '#B4AEA4' },
     ],
     collection: 'AUSH',
+    createdBy: 'admin',
     description: 'Soft fleece layers composed as a coordinated set with a sculpted, winter-ready profile.',
     fit: 'Relaxed set with structured shoulder',
     id: 'product-aush-set',
@@ -113,12 +184,14 @@ export const demoProducts: Product[] = [
   },
   {
     availability: 'in_stock',
+    assignedBranches: ['avishu-franchise-astana'],
     category: 'BASICS',
     colors: [
       { id: 'coffee', label: 'Coffee', swatch: '#7C6654' },
       { id: 'chalk', label: 'Chalk', swatch: '#D8D5CE' },
     ],
     collection: 'SKIN',
+    createdBy: 'admin',
     description: 'A slim long sleeve designed for close layering, soft structure, and quiet tonal styling.',
     fit: 'Close-to-body fit',
     id: 'product-skin-longsleeve',
@@ -130,12 +203,14 @@ export const demoProducts: Product[] = [
   },
   {
     availability: 'preorder',
+    assignedBranches: ['avishu-franchise-astana', 'avishu-franchise-almaty', 'avishu-franchise-shymkent'],
     category: 'CARDIGANS / KNIT',
     colors: [
       { id: 'mist', label: 'Mist', swatch: '#C8C7C2' },
       { id: 'graphite', label: 'Graphite', swatch: '#53514D' },
     ],
     collection: 'LOOM',
+    createdBy: 'admin',
     description: 'A dense knit cardigan with a quiet drape, developed for made-to-order production.',
     fit: 'Soft straight fit',
     id: 'product-loom-cardigan',
@@ -148,12 +223,14 @@ export const demoProducts: Product[] = [
   },
   {
     availability: 'preorder',
+    assignedBranches: ['avishu-franchise-almaty', 'avishu-franchise-shymkent'],
     category: 'TROUSERS',
     colors: [
       { id: 'ink', label: 'Ink', swatch: '#34363A' },
       { id: 'cement', label: 'Cement', swatch: '#B9B6AE' },
     ],
     collection: 'EVO',
+    createdBy: 'admin',
     description: 'Tailored trousers cut with a clean line and produced in a limited preorder window.',
     fit: 'Straight tailored leg',
     id: 'product-evo-trousers',
@@ -166,12 +243,14 @@ export const demoProducts: Product[] = [
   },
   {
     availability: 'in_stock',
+    assignedBranches: ['avishu-franchise-astana', 'avishu-franchise-shymkent'],
     category: 'SKIRTS',
     colors: [
       { id: 'black', label: 'Black', swatch: '#111111' },
       { id: 'pearl', label: 'Pearl', swatch: '#E0DDD6' },
     ],
     collection: 'ALL.INN',
+    createdBy: 'admin',
     description: 'A clean monochrome skirt with a sharp line that balances the softness of the collection.',
     fit: 'Straight column fit',
     id: 'product-all-inn-skirt',
@@ -204,8 +283,10 @@ export const demoOrders: Order[] = [
     productId: demoProducts[0].id,
     productName: demoProducts[0].name,
     productPrice: demoProducts[0].price,
+    productionUnitId: demoProductionUnits[0].id,
     productionNote: 'Packed and standing by for courier handoff.',
     productionNoteUpdatedAt: hoursAgo(6),
+    productionUnitName: demoProductionUnits[0].name,
     status: 'out_for_delivery',
     timeline: {
       acceptedAt: hoursAgo(26),
@@ -238,8 +319,10 @@ export const demoOrders: Order[] = [
     productId: demoProducts[5].id,
     productName: demoProducts[5].name,
     productPrice: demoProducts[5].price,
+    productionUnitId: demoProductionUnits[0].id,
     productionNote: 'Completed and released to the boutique counter.',
     productionNoteUpdatedAt: daysAgo(5),
+    productionUnitName: demoProductionUnits[0].name,
     status: 'delivered',
     timeline: {
       acceptedAt: daysAgo(6),
@@ -272,8 +355,10 @@ export const demoOrders: Order[] = [
     productId: demoProducts[3].id,
     productName: demoProducts[3].name,
     productPrice: demoProducts[3].price,
+    productionUnitId: demoProductionUnits[0].id,
     productionNote: null,
     productionNoteUpdatedAt: null,
+    productionUnitName: demoProductionUnits[0].name,
     status: 'placed',
     timeline: {
       acceptedAt: null,
@@ -306,8 +391,10 @@ export const demoOrders: Order[] = [
     productId: demoProducts[2].id,
     productName: demoProducts[2].name,
     productPrice: demoProducts[2].price,
+    productionUnitId: demoProductionUnits[0].id,
     productionNote: 'Ticket printed. Waiting on first workstation handoff.',
     productionNoteUpdatedAt: hoursAgo(2),
+    productionUnitName: demoProductionUnits[0].name,
     status: 'accepted',
     timeline: {
       acceptedAt: hoursAgo(3),
@@ -340,8 +427,10 @@ export const demoOrders: Order[] = [
     productId: demoProducts[4].id,
     productName: demoProducts[4].name,
     productPrice: demoProducts[4].price,
+    productionUnitId: demoProductionUnits[0].id,
     productionNote: 'Final stitch pass is next, then steam and QC.',
     productionNoteUpdatedAt: hoursAgo(1),
+    productionUnitName: demoProductionUnits[0].name,
     status: 'in_production',
     timeline: {
       acceptedAt: hoursAgo(10),
@@ -374,8 +463,10 @@ export const demoOrders: Order[] = [
     productId: demoProducts[1].id,
     productName: demoProducts[1].name,
     productPrice: demoProducts[1].price,
+    productionUnitId: demoProductionUnits[0].id,
     productionNote: 'QC complete. Waiting for franchisee delivery handoff.',
     productionNoteUpdatedAt: hoursAgo(1),
+    productionUnitName: demoProductionUnits[0].name,
     status: 'ready',
     timeline: {
       acceptedAt: hoursAgo(14),

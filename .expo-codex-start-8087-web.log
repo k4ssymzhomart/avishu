@@ -1,0 +1,23 @@
+env: load .env.local
+env: export EXPO_PUBLIC_FIREBASE_API_KEY EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN EXPO_PUBLIC_FIREBASE_PROJECT_ID EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID EXPO_PUBLIC_FIREBASE_APP_ID
+Starting project at C:\Users\PC\Desktop\avishu
+Starting Metro Bundler
+Waiting on http://localhost:8087
+Logs for your project will appear below.
+Error while reading cache, falling back to a full crawl:
+ Error: Unable to deserialize cloned data.
+    at deserialize (node:v8:405:14)
+    at DiskCacheManager.read (C:\Users\PC\Desktop\avishu\node_modules\metro-file-map\src\cache\DiskCacheManager.js:60:33)
+    at FileMap.read (C:\Users\PC\Desktop\avishu\node_modules\metro-file-map\src\index.js:284:14)
+    at C:\Users\PC\Desktop\avishu\node_modules\metro-file-map\src\index.js:202:25
+    at DependencyGraph.ready (C:\Users\PC\Desktop\avishu\node_modules\metro\src\node-haste\DependencyGraph.js:88:5)
+    at Bundler.ready (C:\Users\PC\Desktop\avishu\node_modules\metro\src\Bundler.js:62:5)
+    at IncrementalBundler.ready (C:\Users\PC\Desktop\avishu\node_modules\metro\src\IncrementalBundler.js:302:5)
+    at Server.ready (C:\Users\PC\Desktop\avishu\node_modules\metro\src\Server.js:1305:5)
+Web node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 87.8% ( 893/2682)
+Web Bundled 4910ms node_modules\expo-router\entry.js (2757 modules)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 188ms node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console

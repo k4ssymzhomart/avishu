@@ -36,8 +36,10 @@ type FirestoreOrderRecord = {
   productImageUrl?: string | null;
   productName: string;
   productPrice: number;
+  productionUnitId?: string | null;
   productionNote?: string | null;
   productionNoteUpdatedAt?: Timestamp | string | null;
+  productionUnitName?: string | null;
   selectedColorId?: string | null;
   selectedColorLabel?: string | null;
   selectedSize?: string | null;
@@ -105,8 +107,10 @@ function normalizeOrder(record: FirestoreOrderRecord, fallbackId: string) {
     productImageUrl: record.productImageUrl ?? null,
     productName: record.productName,
     productPrice: record.productPrice,
+    productionUnitId: record.productionUnitId ?? null,
     productionNote: record.productionNote?.trim().length ? record.productionNote.trim() : null,
     productionNoteUpdatedAt: record.productionNoteUpdatedAt ? toIsoString(record.productionNoteUpdatedAt) : null,
+    productionUnitName: record.productionUnitName ?? null,
     selectedColorId: record.selectedColorId ?? null,
     selectedColorLabel: record.selectedColorLabel ?? null,
     selectedSize: record.selectedSize ?? null,
@@ -196,6 +200,12 @@ async function hydrateOrders(orders: Order[]) {
 }
 
 function filterRelevantProductionOrders(orders: Order[], context: ProductionUserContext) {
+  if (context.productionUnitId) {
+    return orders.filter(
+      (order) => PRODUCTION_STATUSES.includes(order.status) && order.productionUnitId === context.productionUnitId,
+    );
+  }
+
   if (!context.linkedFranchiseIds.length) {
     return orders.filter((order) => PRODUCTION_STATUSES.includes(order.status));
   }
@@ -264,60 +274,26 @@ export function subscribeToProductionOrders(
     return subscribeToDemoProductionOrders(context, cacheKey, onOrders);
   }
 
-  const franchiseIds = context.linkedFranchiseIds.length ? context.linkedFranchiseIds : [null];
-  const sourceMaps = franchiseIds.map(() => new Map<string, Order>());
-  let emitRevision = 0;
-  let isActive = true;
+  const ordersQuery = context.productionUnitId
+    ? query(collection(firestore, ORDERS_COLLECTION), where('productionUnitId', '==', context.productionUnitId))
+    : query(collection(firestore, ORDERS_COLLECTION), where('status', 'in', PRODUCTION_STATUSES));
 
-  const emitOrders = async () => {
-    const currentRevision = ++emitRevision;
-    const mergedOrders = new Map<string, Order>();
+  return onSnapshot(
+    ordersQuery,
+    async (snapshot) => {
+      const orders = snapshot.docs.map((snapshotDoc) =>
+        normalizeOrder(snapshotDoc.data() as FirestoreOrderRecord, snapshotDoc.id),
+      );
+      const nextOrders = await hydrateOrders(sortOrders(filterRelevantProductionOrders(orders, context)));
 
-    sourceMaps.forEach((sourceMap) => {
-      sourceMap.forEach((order, orderId) => {
-        mergedOrders.set(orderId, order);
-      });
-    });
-
-    const nextOrders = await hydrateOrders(
-      sortOrders(filterRelevantProductionOrders(Array.from(mergedOrders.values()), context)),
-    );
-
-    if (!isActive || currentRevision !== emitRevision) {
-      return;
-    }
-
-    productionOrdersCache.set(cacheKey, nextOrders);
-    onOrders(nextOrders);
-  };
-
-  const unsubscribers = franchiseIds.map((franchiseId, index) => {
-    const ordersQuery = franchiseId
-      ? query(collection(firestore, ORDERS_COLLECTION), where('franchiseId', '==', franchiseId))
-      : query(collection(firestore, ORDERS_COLLECTION), where('status', 'in', PRODUCTION_STATUSES));
-
-    return onSnapshot(
-      ordersQuery,
-      (snapshot) => {
-        sourceMaps[index] = new Map(
-          snapshot.docs.map((snapshotDoc) => [
-            snapshotDoc.id,
-            normalizeOrder(snapshotDoc.data() as FirestoreOrderRecord, snapshotDoc.id),
-          ]),
-        );
-        void emitOrders();
-      },
-      () => {
-        sourceMaps[index] = new Map();
-        void emitOrders();
-      },
-    );
-  });
-
-  return () => {
-    isActive = false;
-    unsubscribers.forEach((unsubscribe) => unsubscribe());
-  };
+      productionOrdersCache.set(cacheKey, nextOrders);
+      onOrders(nextOrders);
+    },
+    () => {
+      productionOrdersCache.set(cacheKey, []);
+      onOrders([]);
+    },
+  );
 }
 
 export async function startProductionTask(orderId: string) {

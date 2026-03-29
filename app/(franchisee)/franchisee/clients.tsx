@@ -158,17 +158,17 @@ export default function FranchiseeClientsScreen() {
       <View style={styles.summaryCard}>
         <View style={styles.summaryCell}>
           <Text style={styles.summaryLabel}>{copy.clients.recentClients}</Text>
-          <Text style={styles.summaryValue}>{clients.length.toString().padStart(2, '0')}</Text>
+          <Text style={styles.summaryValue}>{clients.length}</Text>
         </View>
         <Divider style={styles.summaryDivider} />
         <View style={styles.summaryCell}>
           <Text style={styles.summaryLabel}>{copy.clients.activeRelationships}</Text>
-          <Text style={styles.summaryValue}>{activeClientsCount.toString().padStart(2, '0')}</Text>
+          <Text style={styles.summaryValue}>{activeClientsCount}</Text>
         </View>
         <Divider style={styles.summaryDivider} />
         <View style={styles.summaryCell}>
           <Text style={styles.summaryLabel}>{copy.clients.unreadSupport}</Text>
-          <Text style={styles.summaryValue}>{unreadSupportCount.toString().padStart(2, '0')}</Text>
+          <Text style={styles.summaryValue}>{unreadSupportCount}</Text>
         </View>
       </View>
 

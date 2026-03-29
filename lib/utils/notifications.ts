@@ -7,15 +7,15 @@ export function resolveOrderNotificationIcon(input: {
   orderStatus?: OrderStatus | null;
 }): AssetIconName {
   if (input.eventKey === 'out_for_delivery' || input.orderStatus === 'out_for_delivery') {
-    return 'alarm';
+    return 'truck';
   }
 
   if (input.eventKey === 'delivered' || input.orderStatus === 'delivered') {
-    return 'orderPlaced';
+    return 'badgeCheck';
   }
 
   if (input.eventKey === 'production_started' || input.orderStatus === 'in_production') {
-    return 'energy';
+    return 'scissors';
   }
 
   return 'packed';

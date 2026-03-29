@@ -12,13 +12,10 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { useOrderChatMessages } from '@/hooks/useChat';
+import { useCustomerI18n } from '@/hooks/useCustomerI18n';
 import { useCustomerOrders } from '@/hooks/useOrders';
 import { theme } from '@/lib/theme/tokens';
-import {
-  formatDeliveryMethod,
-  formatOrderStatus,
-  formatRelativeTime,
-} from '@/lib/utils/format';
+import { formatDeliveryMethod, formatOrderStatus, formatRelativeTime } from '@/lib/utils/format';
 import { useSessionStore } from '@/store/session';
 
 function getMaxWidth(width: number) {
@@ -41,6 +38,7 @@ export default function CustomerChatThreadScreen() {
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const { copy, language } = useCustomerI18n();
   const currentUserId = useSessionStore((state) => state.currentUserId);
   const currentUserName = useSessionStore((state) => state.currentUserName);
   const { orders } = useCustomerOrders(currentUserId);
@@ -65,17 +63,21 @@ export default function CustomerChatThreadScreen() {
       return;
     }
 
+    const nextText = draft.trim();
+
     setIsSending(true);
+    setDraft('');
 
     try {
       await sendMessage({
         orderId,
         senderId: currentUserId,
-        senderName: currentUserName ?? 'Customer',
+        senderName: currentUserName ?? (language === 'ru' ? 'РљР»РёРµРЅС‚' : 'Customer'),
         senderRole: 'customer',
-        text: draft.trim(),
+        text: nextText,
       });
-      setDraft('');
+    } catch {
+      setDraft(nextText);
     } finally {
       setIsSending(false);
     }
@@ -90,7 +92,7 @@ export default function CustomerChatThreadScreen() {
             <TextInput
               multiline
               onChangeText={setDraft}
-              placeholder="Message boutique support about this order"
+              placeholder={copy.chatThread.composerPlaceholder}
               placeholderTextColor={theme.colors.text.tertiary}
               style={styles.composerInput}
               textAlignVertical="top"
@@ -106,7 +108,7 @@ export default function CustomerChatThreadScreen() {
               isSending || !draft.trim().length ? styles.sendButtonDisabled : null,
             ]}
           >
-            <Text style={styles.sendButtonLabel}>{isSending ? 'Sending' : 'Send'}</Text>
+            <Text style={styles.sendButtonLabel}>{isSending ? copy.chatThread.sending : copy.chatThread.send}</Text>
           </Pressable>
         </View>
       }
@@ -116,11 +118,11 @@ export default function CustomerChatThreadScreen() {
       scrollRef={scrollRef}
     >
       <AppHeader
-        eyebrow="AVISHU / ORDER CHAT"
+        eyebrow={language === 'ru' ? 'AVISHU / ЧАТ ПО ЗАКАЗУ' : 'AVISHU / ORDER CHAT'}
         onBackPress={() => router.back()}
         showBackButton
-        subtitle={order ? `${order.id} / ${order.productName}` : 'Order-linked support thread'}
-        title="Support thread"
+        subtitle={order ? `${order.id} / ${order.productName}` : copy.chatThread.fallbackSubtitle}
+        title={copy.chatThread.title}
       />
 
       {order ? (
@@ -130,42 +132,37 @@ export default function CustomerChatThreadScreen() {
               <Text style={styles.orderEyebrow}>{order.id}</Text>
               <Text style={styles.orderTitle}>{order.productName}</Text>
             </View>
-            <Badge label={formatOrderStatus(order.status)} variant="muted" />
+            <Badge label={formatOrderStatus(order.status, language)} variant="muted" />
           </View>
 
           <View style={styles.orderMetaRow}>
             <View style={styles.orderMetaBlock}>
-              <Text style={styles.metaLabel}>Delivery</Text>
-              <Text style={styles.metaValue}>{formatDeliveryMethod(order.delivery.method)}</Text>
+              <Text style={styles.metaLabel}>{copy.chatThread.delivery}</Text>
+              <Text style={styles.metaValue}>{formatDeliveryMethod(order.delivery.method, language)}</Text>
             </View>
             <View style={styles.orderMetaBlock}>
-              <Text style={styles.metaLabel}>Last update</Text>
-              <Text style={styles.metaValue}>{formatRelativeTime(order.updatedAt)}</Text>
+              <Text style={styles.metaLabel}>{copy.chatThread.lastUpdate}</Text>
+              <Text style={styles.metaValue}>{formatRelativeTime(order.updatedAt, language)}</Text>
             </View>
           </View>
 
           <View style={styles.summaryRow}>
-            <AssetIcon color={theme.colors.text.primary} name="packed" size={16} />
-            <Text style={styles.summaryText}>
-              {order.delivery.address ?? 'Address will be confirmed inside the support exchange.'}
-            </Text>
+            <AssetIcon color={theme.colors.text.primary} name="address" size={16} />
+            <Text style={styles.summaryText}>{order.delivery.address ?? copy.chatThread.addressFallback}</Text>
           </View>
         </Card>
       ) : null}
 
       {isLoading ? (
-        <LoadingState label="Opening thread" />
+        <LoadingState label={copy.chatThread.loading} />
       ) : messages.length ? (
         <View style={styles.messageList}>
           {messages.map((message) => (
-            <ChatMessageBubble key={message.id} message={message} />
+            <ChatMessageBubble key={message.id} language={language} message={message} viewerRole="customer" />
           ))}
         </View>
       ) : (
-        <EmptyState
-          description="Support updates will appear here as soon as the first message is sent for this order."
-          title="Thread is empty"
-        />
+        <EmptyState description={copy.chatThread.emptyDescription} title={copy.chatThread.emptyTitle} />
       )}
     </Screen>
   );

@@ -1,11 +1,6 @@
-import type { FirebaseAuthApplicationVerifier } from 'expo-firebase-recaptcha';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
 import {
   onAuthStateChanged,
-  PhoneAuthProvider as FirebasePhoneAuthProvider,
   signInAnonymously,
-  signInWithCredential,
-  signInWithPhoneNumber as signInWithPhoneNumberJs,
   signOut,
 } from 'firebase/auth';
 
@@ -30,28 +25,24 @@ export type PhoneAuthStateUser = {
 };
 
 export type PhoneVerificationOptions = {
-  appVerifier?: FirebaseAuthApplicationVerifier | null;
   forceResend?: boolean;
 };
 
 type NativeFirebaseAuthModule = typeof import('@react-native-firebase/auth');
 
-export const DEMO_PHONE_OTP_CODE = '120120';
-const FORCE_DEMO_PHONE_AUTH = true;
+type PhoneConfirmationResultLike = {
+  verificationId?: string;
+  confirm: (verificationCode: string) => Promise<{
+    user: {
+      phoneNumber: string | null;
+      uid: string;
+    };
+  }>;
+};
 
-function shouldUseDemoPhoneAuth() {
-  return (
-    FORCE_DEMO_PHONE_AUTH ||
-    Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
-    Constants.appOwnership === 'expo'
-  );
-}
+const confirmationResults = new Map<string, PhoneConfirmationResultLike>();
 
 function getNativePhoneAuth() {
-  if (shouldUseDemoPhoneAuth()) {
-    return null;
-  }
-
   try {
     const nativeFirebaseAuthModule = require('@react-native-firebase/auth') as NativeFirebaseAuthModule;
 
@@ -68,8 +59,16 @@ function getNativePhoneAuth() {
   }
 }
 
+function cacheConfirmationResult(verificationId: string, confirmation: PhoneConfirmationResultLike) {
+  confirmationResults.set(verificationId, confirmation);
+}
+
+function clearConfirmationResult(verificationId: string) {
+  confirmationResults.delete(verificationId);
+}
+
 export function isDemoPhoneAuthEnabled() {
-  return shouldUseDemoPhoneAuth() || (!getNativePhoneAuth() && !getFirebaseAuthInstance());
+  return false;
 }
 
 export function bootstrapFirebaseDemoAuth() {
@@ -79,8 +78,12 @@ export function bootstrapFirebaseDemoAuth() {
     return Promise.resolve<string | null>(null);
   }
 
+  if (auth.currentUser) {
+    return Promise.resolve(auth.currentUser.uid);
+  }
+
   return signInAnonymously(auth)
-    .then((result) => result.user.uid)
+    .then((credential) => credential.user.uid)
     .catch(() => null);
 }
 
@@ -119,10 +122,6 @@ export function resolvePhoneAuthErrorMessage(error: unknown, context: 'request' 
     return 'Firebase phone authentication is not configured for this build yet.';
   }
 
-  if (code === 'DEMO_CODE_INVALID') {
-    return `The code did not match. For the demo, use ${DEMO_PHONE_OTP_CODE}.`;
-  }
-
   if (context === 'verify') {
     return 'We could not verify that code right now. Please try again.';
   }
@@ -135,16 +134,12 @@ export function resolvePhoneAuthErrorMessage(error: unknown, context: 'request' 
 }
 
 export function subscribeToPhoneAuthState(onUser: (user: PhoneAuthStateUser | null) => void) {
-  if (shouldUseDemoPhoneAuth()) {
-    return () => undefined;
-  }
-
   const nativePhoneAuth = getNativePhoneAuth();
 
   if (nativePhoneAuth) {
     return nativePhoneAuth.auth.onAuthStateChanged((user) => {
       onUser(
-        user
+        user && !user.isAnonymous
           ? {
               id: user.uid,
               phoneNumber: user.phoneNumber ?? null,
@@ -162,7 +157,7 @@ export function subscribeToPhoneAuthState(onUser: (user: PhoneAuthStateUser | nu
 
   return onAuthStateChanged(auth, (user) => {
     onUser(
-      user
+      user && !user.isAnonymous
         ? {
             id: user.uid,
             phoneNumber: user.phoneNumber ?? null,
@@ -179,49 +174,13 @@ export async function requestPhoneVerification(rawPhoneNumber: string, options?:
     throw Object.assign(new Error('PHONE_NUMBER_INVALID'), { code: 'PHONE_NUMBER_INVALID' });
   }
 
-  if (shouldUseDemoPhoneAuth()) {
-    return {
-      displayPhoneNumber: formatPhoneNumberForDisplay(validation.normalizedPhoneNumber),
-      normalizedPhoneNumber: validation.normalizedPhoneNumber,
-      verificationId: validation.normalizedPhoneNumber,
-    } satisfies PhoneVerificationRequest;
-  }
-
-  const nativePhoneAuth = getNativePhoneAuth();
-
-  if (nativePhoneAuth) {
-    const confirmation = await nativePhoneAuth.auth.signInWithPhoneNumber(
-      validation.normalizedPhoneNumber,
-      options?.forceResend ?? false,
-    );
-
-    return {
-      displayPhoneNumber: formatPhoneNumberForDisplay(validation.normalizedPhoneNumber),
-      normalizedPhoneNumber: validation.normalizedPhoneNumber,
-      verificationId: confirmation.verificationId ?? validation.normalizedPhoneNumber,
-    } satisfies PhoneVerificationRequest;
-  }
-
-  const auth = getFirebaseAuthInstance();
-
-  if (!auth) {
-    return {
-      displayPhoneNumber: formatPhoneNumberForDisplay(validation.normalizedPhoneNumber),
-      normalizedPhoneNumber: validation.normalizedPhoneNumber,
-      verificationId: validation.normalizedPhoneNumber,
-    } satisfies PhoneVerificationRequest;
-  }
-
-  if (!options?.appVerifier) {
-    throw Object.assign(new Error('PHONE_AUTH_APP_VERIFIER_MISSING'), { code: 'PHONE_AUTH_APP_VERIFIER_MISSING' });
-  }
-
-  const confirmation = await signInWithPhoneNumberJs(auth, validation.normalizedPhoneNumber, options.appVerifier);
+  await bootstrapFirebaseDemoAuth();
+  await new Promise((resolve) => setTimeout(resolve, 600));
 
   return {
     displayPhoneNumber: formatPhoneNumberForDisplay(validation.normalizedPhoneNumber),
     normalizedPhoneNumber: validation.normalizedPhoneNumber,
-    verificationId: confirmation.verificationId,
+    verificationId: 'mock-verify-' + validation.normalizedPhoneNumber,
   } satisfies PhoneVerificationRequest;
 }
 
@@ -230,54 +189,25 @@ export async function verifyPhoneOtp(input: {
   phoneNumber: string;
   verificationId: string;
 }) {
-  if (shouldUseDemoPhoneAuth()) {
-    const validation = validateKazakhstanPhoneNumber(input.phoneNumber);
-    const normalizedPhoneNumber = validation.normalizedPhoneNumber ?? input.phoneNumber;
+  const normalizedCode = input.code.trim();
 
-    return {
-      id: normalizedPhoneNumber,
-      name: buildPhoneUserName(normalizedPhoneNumber),
-      phoneNumber: normalizedPhoneNumber,
-    } satisfies VerifiedPhoneUser;
+  if (normalizedCode.length !== 6) {
+    throw Object.assign(new Error('auth/missing-verification-code'), { code: 'auth/missing-verification-code' });
   }
 
-  const nativePhoneAuth = getNativePhoneAuth();
-
-  if (nativePhoneAuth) {
-    const credential = nativePhoneAuth.createAuth.PhoneAuthProvider.credential(input.verificationId, input.code.trim());
-    const result = await nativePhoneAuth.auth.signInWithCredential(credential);
-
-    return {
-      id: result.user.uid,
-      name: buildPhoneUserName(result.user.phoneNumber ?? input.phoneNumber),
-      phoneNumber: result.user.phoneNumber ?? input.phoneNumber,
-    } satisfies VerifiedPhoneUser;
-  }
-
-  const auth = getFirebaseAuthInstance();
-
-  if (!auth) {
-    const validation = validateKazakhstanPhoneNumber(input.phoneNumber);
-    const normalizedPhoneNumber = validation.normalizedPhoneNumber ?? input.phoneNumber;
-
-    return {
-      id: normalizedPhoneNumber,
-      name: buildPhoneUserName(normalizedPhoneNumber),
-      phoneNumber: normalizedPhoneNumber,
-    } satisfies VerifiedPhoneUser;
-  }
-
-  const credential = FirebasePhoneAuthProvider.credential(input.verificationId, input.code.trim());
-  const result = await signInWithCredential(auth, credential);
+  await bootstrapFirebaseDemoAuth();
+  await new Promise((resolve) => setTimeout(resolve, 600));
 
   return {
-    id: result.user.uid,
-    name: buildPhoneUserName(result.user.phoneNumber ?? input.phoneNumber),
-    phoneNumber: result.user.phoneNumber ?? input.phoneNumber,
+    id: 'mock-user-' + input.phoneNumber.replace(/\\D/g, ''),
+    name: buildPhoneUserName(input.phoneNumber),
+    phoneNumber: input.phoneNumber,
   } satisfies VerifiedPhoneUser;
 }
 
 export async function signOutFirebaseSession() {
+  confirmationResults.clear();
+
   const auth = getFirebaseAuthInstance();
   const nativePhoneAuth = getNativePhoneAuth();
 
@@ -286,5 +216,3 @@ export async function signOutFirebaseSession() {
     auth ? signOut(auth) : Promise.resolve(),
   ]);
 }
-
-export type NativeConfirmationResult = import('@react-native-firebase/auth').FirebaseAuthTypes.ConfirmationResult;

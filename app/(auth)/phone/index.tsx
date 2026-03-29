@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
 
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { Redirect, useRouter } from 'expo-router';
 import { Keyboard, StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native';
 
@@ -27,7 +26,6 @@ export default function PhoneAuthScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const validation = useMemo(() => validateKazakhstanPhoneNumber(phoneEntryValue), [phoneEntryValue]);
   const usesDemoCode = isDemoPhoneAuthEnabled();
-  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal | null>(null);
 
   if (authStatus === 'pending_verification') {
     return <Redirect href="/verify" />;
@@ -47,9 +45,7 @@ export default function PhoneAuthScreen() {
     setErrorMessage(null);
 
     try {
-      await beginPhoneAuth(validation.displayValue, {
-        appVerifier: recaptchaVerifier.current,
-      });
+      await beginPhoneAuth(validation.displayValue);
       router.replace('/verify');
     } catch (error) {
       setErrorMessage(resolvePhoneAuthErrorMessage(error, 'request'));
@@ -117,13 +113,7 @@ export default function PhoneAuthScreen() {
 
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
         </Screen>
-        {hasFirebaseConfig && !usesDemoCode ? (
-          <FirebaseRecaptchaVerifierModal
-            attemptInvisibleVerification
-            firebaseConfig={firebaseConfig}
-            ref={recaptchaVerifier}
-          />
-        ) : null}
+        
       </View>
     </TouchableWithoutFeedback>
   );

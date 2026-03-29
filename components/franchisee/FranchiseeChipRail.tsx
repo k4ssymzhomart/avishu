@@ -33,7 +33,7 @@ export function FranchiseeChipRail({ items, onSelect, selectedKey }: FranchiseeC
             >
               <Text style={[styles.label, isActive ? styles.labelActive : null]}>{item.label}</Text>
               {typeof item.count === 'number' ? (
-                <Text style={[styles.count, isActive ? styles.countActive : null]}>{item.count.toString().padStart(2, '0')}</Text>
+                <Text style={[styles.count, isActive ? styles.countActive : null]}>{item.count}</Text>
               ) : null}
             </Pressable>
           );

@@ -8,7 +8,7 @@ type FranchiseePreferencesState = {
 };
 
 export const useFranchiseePreferencesStore = create<FranchiseePreferencesState>((set) => ({
-  language: 'en',
+  language: 'ru',
   setLanguage: (language) => {
     set({ language });
   },

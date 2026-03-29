@@ -1,4 +1,4 @@
-import { AssetIcon } from '@/components/icons/AssetIcon';
+import { AssetIcon, type AssetIconName } from '@/components/icons/AssetIcon';
 
 import { theme } from '@/lib/theme/tokens';
 
@@ -7,32 +7,21 @@ type NavIconProps = {
   name: string;
 };
 
+const iconByKey: Record<string, { name: AssetIconName; size?: number }> = {
+  active: { name: 'scissors', size: 18.5 },
+  chat: { name: 'chat', size: 18.5 },
+  clients: { name: 'clients', size: 18.5 },
+  dashboard: { name: 'store', size: 19 },
+  home: { name: 'home', size: 19 },
+  orders: { name: 'orders', size: 18.5 },
+  profile: { name: 'profile', size: 19 },
+  queue: { name: 'packageSearch', size: 18.5 },
+  ready: { name: 'badgeCheck', size: 18.5 },
+};
+
 export function NavIcon({ active, name }: NavIconProps) {
   const color = active ? theme.colors.text.inverse : theme.colors.text.secondary;
+  const icon = iconByKey[name] ?? { name: 'sparkles', size: 18.5 };
 
-  if (name === 'home' || name === 'dashboard') {
-    return <AssetIcon color={color} name="home" size={18} />;
-  }
-
-  if (name === 'chat' || name === 'clients') {
-    return <AssetIcon color={color} name="message" size={18} />;
-  }
-
-  if (name === 'orders' || name === 'queue') {
-    return <AssetIcon color={color} name="packed" size={18} />;
-  }
-
-  if (name === 'profile') {
-    return <AssetIcon color={color} name="profile" size={18} />;
-  }
-
-  if (name === 'active') {
-    return <AssetIcon color={color} name="energy" size={18} />;
-  }
-
-  if (name === 'ready') {
-    return <AssetIcon color={color} name="orderPlaced" size={18} />;
-  }
-
-  return <AssetIcon color={color} name="energy" size={18} />;
+  return <AssetIcon color={color} name={icon.name} size={icon.size} />;
 }

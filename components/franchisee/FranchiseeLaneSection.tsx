@@ -30,7 +30,7 @@ export function FranchiseeLaneSection({
           <Text style={[styles.label, priority ? styles.labelPriority : null]}>{label}</Text>
           <Text style={[styles.description, priority ? styles.descriptionPriority : null]}>{description}</Text>
         </View>
-        <Text style={[styles.count, priority ? styles.countPriority : null]}>{count.toString().padStart(2, '0')}</Text>
+        <Text style={[styles.count, priority ? styles.countPriority : null]}>{count}</Text>
       </View>
 
       <Divider style={priority ? styles.dividerPriority : null} />

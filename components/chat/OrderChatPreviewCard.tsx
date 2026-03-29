@@ -6,11 +6,12 @@ import { formatChatTimestamp, formatOrderStatus } from '@/lib/utils/format';
 import type { OrderChatThread } from '@/types/chat';
 
 type OrderChatPreviewCardProps = {
+  language?: 'en' | 'ru';
   onPress: () => void;
   thread: OrderChatThread;
 };
 
-export function OrderChatPreviewCard({ onPress, thread }: OrderChatPreviewCardProps) {
+export function OrderChatPreviewCard({ language = 'en', onPress, thread }: OrderChatPreviewCardProps) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}>
       <View style={styles.copy}>
@@ -18,7 +19,7 @@ export function OrderChatPreviewCard({ onPress, thread }: OrderChatPreviewCardPr
           <Text numberOfLines={1} style={styles.title}>
             {thread.productName}
           </Text>
-          <Text style={styles.timestamp}>{formatChatTimestamp(thread.lastMessageAt)}</Text>
+          <Text style={styles.timestamp}>{formatChatTimestamp(thread.lastMessageAt, language)}</Text>
         </View>
 
         <Text style={styles.orderId}>{thread.orderId}</Text>
@@ -28,8 +29,15 @@ export function OrderChatPreviewCard({ onPress, thread }: OrderChatPreviewCardPr
       </View>
 
       <View style={styles.side}>
-        <Badge label={formatOrderStatus(thread.orderStatus)} variant={thread.unreadCountForCustomer ? 'inverse' : 'outline'} />
-        {thread.unreadCountForCustomer ? <Text style={styles.unread}>{`${thread.unreadCountForCustomer} unread`}</Text> : null}
+        <Badge
+          label={formatOrderStatus(thread.orderStatus, language)}
+          variant={thread.unreadCountForCustomer ? 'inverse' : 'outline'}
+        />
+        {thread.unreadCountForCustomer ? (
+          <Text style={styles.unread}>
+            {language === 'ru' ? `${thread.unreadCountForCustomer} непрочит.` : `${thread.unreadCountForCustomer} unread`}
+          </Text>
+        ) : null}
       </View>
     </Pressable>
   );

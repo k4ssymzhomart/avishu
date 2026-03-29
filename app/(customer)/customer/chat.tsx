@@ -9,7 +9,7 @@ import { RoleBottomNav } from '@/components/navigation/RoleBottomNav';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { useCustomerChatThreads } from '@/hooks/useChat';
-import { customerBottomNav } from '@/lib/constants/navigation';
+import { useCustomerI18n } from '@/hooks/useCustomerI18n';
 import { theme } from '@/lib/theme/tokens';
 import { useSessionStore } from '@/store/session';
 
@@ -22,6 +22,7 @@ function getLayout(width: number) {
 export default function CustomerChatScreen() {
   const router = useRouter();
   const currentUserId = useSessionStore((state) => state.currentUserId);
+  const { copy, language, navItems } = useCustomerI18n();
   const { isLoading, threads } = useCustomerChatThreads(currentUserId);
   const { width } = useWindowDimensions();
   const layout = useMemo(() => getLayout(width), [width]);
@@ -36,7 +37,7 @@ export default function CustomerChatScreen() {
 
   return (
     <Screen
-      footer={<RoleBottomNav activeKey="chat" items={customerBottomNav} variant="floating" />}
+      footer={<RoleBottomNav activeKey="chat" items={navItems} variant="floating" />}
       footerMaxWidth={540}
       footerMode="floating"
       maxContentWidth={layout.maxContentWidth}
@@ -44,31 +45,30 @@ export default function CustomerChatScreen() {
     >
       <View style={[styles.header, layout.isWide ? styles.headerWide : null]}>
         <View style={styles.headerCopy}>
-          <Text style={styles.eyebrow}>AVISHU / CHAT</Text>
-          <Text style={styles.title}>Support chat</Text>
-          <Text style={styles.subtitle}>
-            Each conversation stays tied to one order so sizing and delivery updates remain easy to follow.
-          </Text>
+          <Text style={styles.eyebrow}>{language === 'ru' ? 'AVISHU / ЧАТ' : 'AVISHU / CHAT'}</Text>
+          <Text style={styles.title}>{copy.chat.supportTitle}</Text>
+          <Text style={styles.subtitle}>{copy.chat.subtitle}</Text>
         </View>
         <View style={styles.summaryBox}>
           <Text style={styles.summaryValue}>{unreadCount}</Text>
-          <Text style={styles.summaryLabel}>Unread</Text>
+          <Text style={styles.summaryLabel}>{copy.chat.unread}</Text>
         </View>
       </View>
 
       {isLoading ? (
-        <LoadingState label="Loading conversations" />
+        <LoadingState label={language === 'ru' ? 'Загрузка диалогов' : 'Loading conversations'} />
       ) : threads.length ? (
         <>
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Current conversations</Text>
-              <Text style={styles.sectionMeta}>{activeThreads.length} active</Text>
+              <Text style={styles.sectionTitle}>{copy.chat.current}</Text>
+              <Text style={styles.sectionMeta}>{`${activeThreads.length} ${language === 'ru' ? 'активно' : 'active'}`}</Text>
             </View>
             {activeThreads.length ? (
               <View style={styles.threadList}>
                 {activeThreads.map((thread) => (
                   <OrderChatPreviewCard
+                    language={language}
                     key={thread.id}
                     onPress={() => router.push(`/customer/chat/${thread.orderId}`)}
                     thread={thread}
@@ -77,39 +77,35 @@ export default function CustomerChatScreen() {
               </View>
             ) : (
               <EmptyState
-                description="Open support threads will appear here as soon as an order receives its first update."
-                title="No active conversations"
+                description={copy.chat.noActiveDescription}
+                title={copy.chat.noActiveTitle}
               />
             )}
           </View>
 
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Archived conversations</Text>
-              <Text style={styles.sectionMeta}>{archivedThreads.length} closed</Text>
-            </View>
-            {archivedThreads.length ? (
+          {archivedThreads.length ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{copy.chat.archived}</Text>
+                <Text style={styles.sectionMeta}>{`${archivedThreads.length} ${copy.chat.closed}`}</Text>
+              </View>
               <View style={styles.threadList}>
                 {archivedThreads.map((thread) => (
                   <OrderChatPreviewCard
+                    language={language}
                     key={thread.id}
                     onPress={() => router.push(`/customer/chat/${thread.orderId}`)}
                     thread={thread}
                   />
                 ))}
               </View>
-            ) : (
-              <EmptyState
-                description="Delivered order threads will move here once the active support flow is complete."
-                title="No archived conversations"
-              />
-            )}
-          </View>
+            </View>
+          ) : null}
         </>
       ) : (
         <EmptyState
-          description="Your order conversations will appear here automatically after the boutique sends the first update."
-          title="No messages yet"
+          description={copy.chat.emptyDescription}
+          title={copy.chat.emptyTitle}
         />
       )}
     </Screen>

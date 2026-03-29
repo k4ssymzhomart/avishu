@@ -14,15 +14,14 @@ import { ProductPreviewCard } from '@/components/product/ProductPreviewCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SkeletonBlock } from '@/components/ui/SkeletonBlock';
 import { useCustomerChatThreads } from '@/hooks/useChat';
+import { useCustomerI18n } from '@/hooks/useCustomerI18n';
 import { useProducts } from '@/hooks/useProducts';
-import { customerBottomNav } from '@/lib/constants/navigation';
+import { demoUsersByRole } from '@/lib/constants/demo';
 import { theme } from '@/lib/theme/tokens';
-import { formatAvailability, formatCurrency } from '@/lib/utils/format';
+import { formatCurrency } from '@/lib/utils/format';
 import { useCartStore } from '@/store/cart';
 import { useFavoritesStore } from '@/store/favorites';
 import { useSessionStore } from '@/store/session';
-
-const categories = ['ALL', 'NEW', 'OUTERWEAR', 'BASICS', 'CARDIGANS / KNIT', 'TROUSERS', 'SKIRTS'] as const;
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const waveIcon = require('@/images/waving-hand.png');
@@ -161,7 +160,15 @@ export default function CustomerHomeScreen() {
   const router = useRouter();
   const currentUserId = useSessionStore((state) => state.currentUserId);
   const currentUserName = useSessionStore((state) => state.currentUserName);
-  const { products, isLoading } = useProducts();
+  const currentUserProfile = useSessionStore((state) => state.currentUserProfile);
+  const { categoryOptions, copy, formatAvailabilityLabel, language, navItems } = useCustomerI18n();
+  const assignedFranchiseId = currentUserProfile?.assignedFranchiseId ?? demoUsersByRole.customer.franchiseId ?? null;
+  const assignedFranchiseName =
+    currentUserProfile?.assignedFranchiseName ?? demoUsersByRole.customer.franchiseName ?? 'AVISHU Boutique';
+  const { products, isLoading } = useProducts({
+    branchId: assignedFranchiseId,
+    scope: 'branch',
+  });
   const { threads } = useCustomerChatThreads(currentUserId);
   const cartItemCount = useCartStore((state) => state.cartItems.length);
   const favoriteProductIds = useFavoritesStore((state) => state.favoriteProductIds);
@@ -196,6 +203,7 @@ export default function CustomerHomeScreen() {
   }, [products, searchQuery, selectedCategory]);
 
   const firstName = currentUserName ? currentUserName.split(' ')[0] : null;
+  const greetingName = firstName ?? currentUserName?.trim() ?? '';
   const heroProduct = products.find((product) => product.collection === 'ALL.INN') ?? products[0];
   const unreadNotificationCount = threads.reduce(
     (count, thread) => count + thread.unreadCountForCustomer,
@@ -211,7 +219,7 @@ export default function CustomerHomeScreen() {
   if (isLoading) {
     return (
       <Screen
-        footer={<RoleBottomNav activeKey="home" items={customerBottomNav} variant="floating" />}
+        footer={<RoleBottomNav activeKey="home" items={navItems} variant="floating" />}
         footerMaxWidth={540}
         footerMode="floating"
         maxContentWidth={layout.maxContentWidth}
@@ -224,7 +232,7 @@ export default function CustomerHomeScreen() {
 
   return (
     <Screen
-      footer={<RoleBottomNav activeKey="home" items={customerBottomNav} variant="floating" />}
+      footer={<RoleBottomNav activeKey="home" items={navItems} variant="floating" />}
       footerMaxWidth={540}
       footerMode="floating"
       maxContentWidth={layout.maxContentWidth}
@@ -236,7 +244,7 @@ export default function CustomerHomeScreen() {
             <View style={styles.headerTextWrap}>
               <View style={styles.greetingRow}>
                 <Text numberOfLines={1} style={styles.greeting}>
-                  {firstName ? `Hello, ${firstName}` : 'Welcome'}
+                  {greetingName}
                 </Text>
                 <Image resizeMode="contain" source={waveIcon} style={styles.waveIcon} />
               </View>
@@ -247,7 +255,7 @@ export default function CustomerHomeScreen() {
                 onPress={() => router.push('/customer/notifications')}
                 style={({ pressed }) => [styles.iconButton, pressed ? styles.iconButtonPressed : null]}
               >
-                <AssetIcon color={theme.colors.text.primary} name="alarm" size={18} />
+                <AssetIcon color={theme.colors.text.primary} name="alarm" size={17} />
                 {unreadNotificationCount ? (
                   <View style={styles.notificationBadge}>
                     <Text style={styles.notificationBadgeText}>
@@ -261,7 +269,7 @@ export default function CustomerHomeScreen() {
                 onPress={() => router.push('/customer/cart')}
                 style={({ pressed }) => [styles.iconButton, pressed ? styles.iconButtonPressed : null]}
               >
-                <AssetIcon color={theme.colors.text.primary} name="packed" size={18} />
+                <AssetIcon color={theme.colors.text.primary} name="bag" size={17} />
                 {cartItemCount ? (
                   <View style={styles.notificationBadge}>
                     <Text style={styles.notificationBadgeText}>
@@ -284,12 +292,12 @@ export default function CustomerHomeScreen() {
 
           <SearchBar
             onChangeText={setSearchQuery}
-            placeholder="Search collections..."
+            placeholder={copy.home.searchPlaceholder}
             value={searchQuery}
           />
 
           <CategoryRail
-            categories={[...categories]}
+            categories={categoryOptions}
             onSelect={setSelectedCategory}
             selectedCategory={selectedCategory}
             wrap={layout.isDesktop}
@@ -297,20 +305,29 @@ export default function CustomerHomeScreen() {
 
           <View style={styles.controlRow}>
             <Text style={styles.controlMeta}>
-              {filteredProducts.length} {filteredProducts.length === 1 ? 'piece' : 'pieces'}
+              {filteredProducts.length} {copy.home.itemsSuffix}
             </Text>
             <GridToggle mode={gridMode} onToggle={setGridMode} />
           </View>
 
+          <View style={styles.assignmentStrip}>
+            <Text style={styles.assignmentLabel}>Assigned boutique</Text>
+            <Text style={styles.assignmentValue}>{assignedFranchiseName}</Text>
+          </View>
+
           <View style={styles.metricRow}>
             <Pressable onPress={() => router.push('/customer/cart')} style={styles.metricCard}>
-              <Text style={styles.metricLabel}>Cart</Text>
-              <Text style={styles.metricValue}>{cartItemCount ? `${cartItemCount} selected` : 'Ready to fill'}</Text>
+              <Text style={styles.metricLabel}>{copy.home.cartLabel}</Text>
+              <Text style={styles.metricValue}>
+                {cartItemCount ? `${copy.home.selectedPrefix}: ${cartItemCount}` : copy.home.cartReady}
+              </Text>
             </Pressable>
             <Pressable onPress={() => router.push('/customer/chat')} style={styles.metricCard}>
-              <Text style={styles.metricLabel}>Support</Text>
+              <Text style={styles.metricLabel}>{copy.home.supportLabel}</Text>
               <Text style={styles.metricValue}>
-                {unreadNotificationCount ? `${unreadNotificationCount} unread updates` : 'Order threads stay calm'}
+                {unreadNotificationCount
+                  ? `${copy.home.unreadPrefix}: ${unreadNotificationCount}`
+                  : copy.home.supportCalm}
               </Text>
             </Pressable>
           </View>
@@ -335,7 +352,7 @@ export default function CustomerHomeScreen() {
                 <View style={styles.heroCopy}>
                   <Text style={styles.heroTitle}>{heroProduct.name}</Text>
                   <Text style={styles.heroMeta}>
-                    {`${formatAvailability(heroProduct.availability)} / ${heroProduct.category ?? 'Curated piece'}`}
+                    {`${formatAvailabilityLabel(heroProduct.availability)} / ${heroProduct.category ?? copy.home.curatedPiece}`}
                   </Text>
                 </View>
                 <Text style={styles.heroPrice}>{formatCurrency(heroProduct.price)}</Text>
@@ -347,8 +364,8 @@ export default function CustomerHomeScreen() {
 
       {filteredProducts.length === 0 ? (
         <EmptyState
-          description="Try a different search or switch categories to reopen the curated selection."
-          title="No products found"
+          description={copy.home.emptyDescription}
+          title={copy.home.emptyTitle}
         />
       ) : gridMode === 'grid' ? (
         <View style={[styles.grid, { gap: layout.gridGap }]}>
@@ -356,6 +373,7 @@ export default function CustomerHomeScreen() {
             <View key={product.id} style={{ width: gridItemWidth }}>
               <ProductGridCard
                 isFavorite={favoriteProductIds.includes(product.id)}
+                language={language}
                 onPress={() => router.push(`/customer/product/${product.id}`)}
                 product={product}
               />
@@ -368,6 +386,7 @@ export default function CustomerHomeScreen() {
             <View key={product.id} style={{ width: listItemWidth }}>
               <ProductPreviewCard
                 isFavorite={favoriteProductIds.includes(product.id)}
+                language={language}
                 onPress={() => router.push(`/customer/product/${product.id}`)}
                 product={product}
               />
@@ -380,6 +399,27 @@ export default function CustomerHomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  assignmentLabel: {
+    color: theme.colors.text.secondary,
+    fontSize: theme.typography.size.xs,
+    fontWeight: theme.typography.weight.medium,
+    letterSpacing: theme.typography.tracking.widest,
+    textTransform: 'uppercase',
+  },
+  assignmentStrip: {
+    backgroundColor: theme.colors.surface.muted,
+    borderColor: theme.colors.border.subtle,
+    borderWidth: theme.borders.width.thin,
+    gap: 4,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  assignmentValue: {
+    color: theme.colors.text.primary,
+    fontFamily: theme.typography.family.display,
+    fontSize: theme.typography.size.lg,
+    lineHeight: theme.typography.lineHeight.lg,
+  },
   avatarText: {
     color: theme.colors.text.inverse,
     fontSize: theme.typography.size.sm,
@@ -409,13 +449,14 @@ const styles = StyleSheet.create({
     color: theme.colors.text.primary,
     flexShrink: 1,
     fontFamily: theme.typography.family.display,
-    fontSize: theme.typography.size.lg,
-    lineHeight: theme.typography.lineHeight.lg,
+    fontSize: theme.typography.size.xl,
+    lineHeight: theme.typography.lineHeight.xl,
   },
   greetingRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
+    minHeight: 42,
   },
   grid: {
     flexDirection: 'row',
@@ -586,7 +627,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   waveIcon: {
-    height: 42,
-    width: 42,
+    height: 34,
+    width: 34,
   },
 });

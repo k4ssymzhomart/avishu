@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppRuntimeBridge } from '@/components/runtime/AppRuntimeBridge';
 import { theme } from '@/lib/theme/tokens';
+import { bootstrapFirebaseDemoAuth } from '@/services/auth';
 import { bootstrapAppData } from '@/services/bootstrap';
 
 export default function RootLayout() {
@@ -15,7 +16,21 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    void bootstrapAppData();
+    let isMounted = true;
+
+    void (async () => {
+      await bootstrapFirebaseDemoAuth();
+
+      if (!isMounted) {
+        return;
+      }
+
+      await bootstrapAppData();
+    })();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   if (!fontsLoaded) {

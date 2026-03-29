@@ -1,13 +1,23 @@
 import { collection, doc, getDocs, writeBatch } from 'firebase/firestore';
 
-import { demoChatMessages, demoChatThreads, demoOrders, demoProducts, demoUsersByRole } from '@/lib/constants/demo';
+import {
+  demoChatMessages,
+  demoChatThreads,
+  demoFranchises,
+  demoOrders,
+  demoProducts,
+  demoProductionUnits,
+  demoUsersByRole,
+} from '@/lib/constants/demo';
 import { getFirestoreInstance } from '@/lib/firebase';
 import { useDemoRealtimeStore } from '@/store/demoRealtime';
 
+const FRANCHISES_COLLECTION = 'franchises';
 const ORDERS_COLLECTION = 'orders';
 const ORDER_CHATS_COLLECTION = 'orderChats';
 const ORDER_CHAT_MESSAGES_COLLECTION = 'orderChatMessages';
 const PRODUCTS_COLLECTION = 'products';
+const PRODUCTION_UNITS_COLLECTION = 'production_units';
 const USERS_COLLECTION = 'users';
 
 async function seedUsersAndProducts() {
@@ -22,6 +32,14 @@ async function seedUsersAndProducts() {
 
   demoProducts.forEach((product) => {
     batch.set(doc(firestore, PRODUCTS_COLLECTION, product.id), product);
+  });
+
+  demoFranchises.forEach((franchise) => {
+    batch.set(doc(firestore, FRANCHISES_COLLECTION, franchise.id), franchise);
+  });
+
+  demoProductionUnits.forEach((unit) => {
+    batch.set(doc(firestore, PRODUCTION_UNITS_COLLECTION, unit.id), unit);
   });
 
   Object.values(demoUsersByRole).forEach((user) => {
@@ -103,6 +121,14 @@ export async function resetDemoState() {
 
   demoProducts.forEach((product) => {
     batch.set(doc(firestore, PRODUCTS_COLLECTION, product.id), product);
+  });
+
+  demoFranchises.forEach((franchise) => {
+    batch.set(doc(firestore, FRANCHISES_COLLECTION, franchise.id), franchise);
+  });
+
+  demoProductionUnits.forEach((unit) => {
+    batch.set(doc(firestore, PRODUCTION_UNITS_COLLECTION, unit.id), unit);
   });
 
   Object.values(demoUsersByRole).forEach((user) => {

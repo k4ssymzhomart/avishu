@@ -21,11 +21,20 @@ type NotificationFeedProps = {
   emptyTitle: string;
   isLoading: boolean;
   items: NotificationFeedItem[];
+  language?: 'en' | 'ru';
+  loadingLabel?: string;
 };
 
-export function NotificationFeed({ emptyDescription, emptyTitle, isLoading, items }: NotificationFeedProps) {
+export function NotificationFeed({
+  emptyDescription,
+  emptyTitle,
+  isLoading,
+  items,
+  language = 'en',
+  loadingLabel = 'Loading notifications',
+}: NotificationFeedProps) {
   if (isLoading && !items.length) {
-    return <LoadingState label="Loading notifications" />;
+    return <LoadingState label={loadingLabel} />;
   }
 
   if (!items.length) {
@@ -37,7 +46,7 @@ export function NotificationFeed({ emptyDescription, emptyTitle, isLoading, item
       {items.map((item) => (
         <Pressable key={item.id} onPress={item.action} style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}>
           <View style={styles.iconChip}>
-            <AssetIcon color={theme.colors.text.primary} name={item.icon} size={14} />
+            <AssetIcon color={theme.colors.text.primary} name={item.icon} size={16} />
           </View>
 
           <View style={styles.copy}>
@@ -45,7 +54,7 @@ export function NotificationFeed({ emptyDescription, emptyTitle, isLoading, item
               <Text numberOfLines={1} style={styles.title}>
                 {item.title}
               </Text>
-              <Text style={styles.time}>{formatRelativeTime(item.timestamp)}</Text>
+              <Text style={styles.time}>{formatRelativeTime(item.timestamp, language)}</Text>
             </View>
             <Text numberOfLines={2} style={styles.body}>
               {item.body}
@@ -73,10 +82,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: theme.colors.surface.muted,
     borderColor: theme.colors.border.subtle,
+    borderRadius: 999,
     borderWidth: theme.borders.width.thin,
-    height: 30,
+    height: 32,
     justifyContent: 'center',
-    width: 30,
+    width: 32,
   },
   list: {
     borderTopColor: theme.colors.border.subtle,

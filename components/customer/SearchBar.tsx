@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 
+import { AssetIcon } from '@/components/icons/AssetIcon';
 import { theme } from '@/lib/theme/tokens';
 
 type SearchBarProps = {
@@ -9,39 +9,11 @@ type SearchBarProps = {
   value: string;
 };
 
-function SearchIcon({ color = theme.colors.text.secondary }: { color?: string }) {
-  return (
-    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M21 21L16.65 16.65M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-function ClearIcon({ color = theme.colors.text.secondary }: { color?: string }) {
-  return (
-    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M18 6L6 18M6 6L18 18"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
 export function SearchBar({ onChangeText, placeholder = 'Search products...', value }: SearchBarProps) {
   return (
     <View style={styles.container}>
       <View style={styles.iconWrap}>
-        <SearchIcon />
+        <AssetIcon color={theme.colors.text.secondary} name="search" size={15} />
       </View>
       <TextInput
         autoCapitalize="none"
@@ -55,7 +27,7 @@ export function SearchBar({ onChangeText, placeholder = 'Search products...', va
       />
       {value.length > 0 ? (
         <Pressable onPress={() => onChangeText('')} style={styles.clearButton} hitSlop={8}>
-          <ClearIcon />
+          <AssetIcon color={theme.colors.text.secondary} name="x" size={14} />
         </Pressable>
       ) : null}
     </View>
@@ -65,9 +37,9 @@ export function SearchBar({ onChangeText, placeholder = 'Search products...', va
 const styles = StyleSheet.create({
   clearButton: {
     alignItems: 'center',
-    height: 28,
+    height: 30,
     justifyContent: 'center',
-    width: 28,
+    width: 30,
   },
   container: {
     alignItems: 'center',
@@ -81,9 +53,9 @@ const styles = StyleSheet.create({
   },
   iconWrap: {
     alignItems: 'center',
-    height: 20,
+    height: 18,
     justifyContent: 'center',
-    width: 20,
+    width: 18,
   },
   input: {
     color: theme.colors.text.primary,

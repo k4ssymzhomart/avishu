@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { demoChatMessages, demoChatThreads, demoOrders, demoProducts } from '@/lib/constants/demo';
+import { demoUsersByRole } from '@/lib/constants/demo';
 import type { CreateOrderChatMessageInput, OrderChatMessage, OrderChatThread } from '@/types/chat';
 import type { CreateOrderInput, Order, OrderStatus } from '@/types/order';
 import type { Product } from '@/types/product';
@@ -17,8 +18,22 @@ type DemoRealtimeState = {
   resetDemo: () => void;
   seedProducts: () => void;
   sendMessage: (input: CreateOrderChatMessageInput) => OrderChatMessage;
+  upsertProduct: (product: Product) => void;
   updateProductionNote: (orderId: string, note: string) => void;
-  updateOrderStatus: (orderId: string, status: OrderStatus) => void;
+  updateOrderStatus: (
+    orderId: string,
+    status: OrderStatus,
+    options?: {
+      branchId?: string | null;
+      branchName?: string | null;
+      franchiseId?: string | null;
+      productionUnitId?: string | null;
+      productionUnitName?: string | null;
+      senderId?: string | null;
+      senderName?: string | null;
+      senderRole?: OrderChatMessage['senderRole'];
+    },
+  ) => void;
 };
 
 function generateId(prefix: string) {
@@ -29,7 +44,10 @@ function sortThreads(threads: OrderChatThread[]) {
   return [...threads].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
 }
 
-function statusMessage(status: OrderStatus) {
+function statusMessage(
+  status: OrderStatus,
+  senderRole: OrderChatMessage['senderRole'] = 'support',
+) {
   if (status === 'accepted') {
     return 'Boutique confirmed your order and queued it for production.';
   }
@@ -50,7 +68,45 @@ function statusMessage(status: OrderStatus) {
     return 'Your order has been delivered.';
   }
 
+  if (status === 'cancelled') {
+    return senderRole === 'customer'
+      ? 'The customer cancelled this order. Boutique support can follow up in chat if needed.'
+      : 'Your order was cancelled. Boutique support will follow up if needed.';
+  }
+
   return 'Your order is placed. Boutique confirmation is in progress.';
+}
+
+function resolveStatusSender(
+  options?: {
+    senderId?: string | null;
+    senderName?: string | null;
+    senderRole?: OrderChatMessage['senderRole'];
+  },
+) {
+  const senderRole = options?.senderRole ?? 'support';
+
+  return {
+    senderId:
+      options?.senderId ??
+      (senderRole === 'franchisee'
+        ? demoUsersByRole.franchisee.id
+        : senderRole === 'production'
+          ? demoUsersByRole.production.id
+          : senderRole === 'customer'
+            ? demoUsersByRole.customer.id
+            : 'avishu-support'),
+    senderName:
+      options?.senderName ??
+      (senderRole === 'franchisee'
+        ? demoUsersByRole.franchisee.branchName ?? demoUsersByRole.franchisee.name
+        : senderRole === 'production'
+          ? demoUsersByRole.production.productionUnitName ?? demoUsersByRole.production.name
+          : senderRole === 'customer'
+            ? demoUsersByRole.customer.name
+            : 'AVISHU Care'),
+    senderRole,
+  } satisfies Pick<OrderChatMessage, 'senderId' | 'senderName' | 'senderRole'>;
 }
 
 function nextTimeline(status: OrderStatus, previousTimeline: Order['timeline'], timestamp: string) {
@@ -135,8 +191,10 @@ export const useDemoRealtimeStore = create<DemoRealtimeState>((set, get) => ({
       productImageUrl: input.productImageUrl ?? null,
       productName: input.productName,
       productPrice: input.productPrice,
+      productionUnitId: input.productionUnitId ?? null,
       productionNote: null,
       productionNoteUpdatedAt: null,
+      productionUnitName: input.productionUnitName ?? null,
       selectedColorId: input.selectedColorId ?? null,
       selectedColorLabel: input.selectedColorLabel ?? null,
       selectedSize: input.selectedSize ?? null,
@@ -251,6 +309,22 @@ export const useDemoRealtimeStore = create<DemoRealtimeState>((set, get) => ({
 
     return message;
   },
+  upsertProduct: (product) => {
+    set((state) => {
+      const existingIndex = state.products.findIndex((entry) => entry.id === product.id);
+      const nextProducts = [...state.products];
+
+      if (existingIndex === -1) {
+        nextProducts.unshift(product);
+      } else {
+        nextProducts[existingIndex] = product;
+      }
+
+      return {
+        products: nextProducts.sort((left, right) => left.name.localeCompare(right.name, 'ru')),
+      };
+    });
+  },
   updateProductionNote: (orderId, note) => {
     const timestamp = new Date().toISOString();
 
@@ -267,10 +341,11 @@ export const useDemoRealtimeStore = create<DemoRealtimeState>((set, get) => ({
       ),
     }));
   },
-  updateOrderStatus: (orderId, status) => {
+  updateOrderStatus: (orderId, status, options) => {
     const timestamp = new Date().toISOString();
-    const note = statusMessage(status);
     const order = get().orders.find((item) => item.id === orderId);
+    const sender = resolveStatusSender(options);
+    const note = statusMessage(status, sender.senderRole);
 
     set((state) => ({
       chatMessages:
@@ -281,9 +356,9 @@ export const useDemoRealtimeStore = create<DemoRealtimeState>((set, get) => ({
                 createdAt: timestamp,
                 id: generateId('msg'),
                 orderId,
-                senderId: 'avishu-support',
-                senderName: 'AVISHU Care',
-                senderRole: 'support',
+                senderId: sender.senderId,
+                senderName: sender.senderName,
+                senderRole: sender.senderRole,
                 text: note,
               },
             ]
@@ -306,6 +381,11 @@ export const useDemoRealtimeStore = create<DemoRealtimeState>((set, get) => ({
         entry.id === orderId
           ? {
               ...entry,
+              ...(options?.branchId !== undefined ? { branchId: options.branchId } : {}),
+              ...(options?.branchName !== undefined ? { branchName: options.branchName } : {}),
+              ...(options?.franchiseId != null ? { franchiseId: options.franchiseId } : {}),
+              ...(options?.productionUnitId !== undefined ? { productionUnitId: options.productionUnitId } : {}),
+              ...(options?.productionUnitName !== undefined ? { productionUnitName: options.productionUnitName } : {}),
               status,
               timeline: nextTimeline(status, entry.timeline, timestamp),
               updatedAt: timestamp,

@@ -5,23 +5,32 @@ import { theme } from '@/lib/theme/tokens';
 
 type CheckoutHeaderProps = {
   currentStep: number;
+  eyebrow?: string;
   onBackPress: () => void;
+  stepLabel?: string;
   subtitle?: string;
   title: string;
 };
 
 const totalSteps = 5;
 
-export function CheckoutHeader({ currentStep, onBackPress, subtitle, title }: CheckoutHeaderProps) {
+export function CheckoutHeader({
+  currentStep,
+  eyebrow = 'AVISHU / PURCHASE FLOW',
+  onBackPress,
+  stepLabel = 'Step',
+  subtitle,
+  title,
+}: CheckoutHeaderProps) {
   return (
     <View style={styles.container}>
       <View style={styles.topRow}>
         <BackButton onPress={onBackPress} />
-        <Text style={styles.stepMeta}>{`Step ${currentStep} / ${totalSteps}`}</Text>
+        <Text style={styles.stepMeta}>{`${stepLabel} ${currentStep} / ${totalSteps}`}</Text>
       </View>
 
       <View style={styles.copy}>
-        <Text style={styles.eyebrow}>AVISHU / PURCHASE FLOW</Text>
+        <Text style={styles.eyebrow}>{eyebrow}</Text>
         <Text style={styles.title}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       </View>

@@ -3,7 +3,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { theme } from '@/lib/theme/tokens';
 
 type CategoryRailProps = {
-  categories: string[];
+  categories: Array<{
+    key: string;
+    label: string;
+  }>;
   selectedCategory: string;
   onSelect: (category: string) => void;
   wrap?: boolean;
@@ -11,19 +14,19 @@ type CategoryRailProps = {
 
 export function CategoryRail({ categories, selectedCategory, onSelect, wrap = false }: CategoryRailProps) {
   const content = categories.map((category) => {
-    const isActive = category === selectedCategory;
+    const isActive = category.key === selectedCategory;
 
     return (
       <Pressable
-        key={category}
-        onPress={() => onSelect(category)}
+        key={category.key}
+        onPress={() => onSelect(category.key)}
         style={({ pressed }) => [
           styles.chip,
           isActive ? styles.chipActive : null,
           pressed ? styles.chipPressed : null,
         ]}
       >
-        <Text style={[styles.label, isActive ? styles.labelActive : null]}>{category}</Text>
+        <Text style={[styles.label, isActive ? styles.labelActive : null]}>{category.label}</Text>
       </Pressable>
     );
   });

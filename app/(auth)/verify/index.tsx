@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { Redirect, useRouter } from 'expo-router';
 import { Keyboard, StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native';
 
@@ -9,7 +8,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { Screen } from '@/components/layout/Screen';
 import { Button } from '@/components/ui/Button';
 import { TextButton } from '@/components/ui/TextButton';
-import { useRoleRedirect } from '@/hooks/useRoleRedirect';
+import { resolveEntryPath, useRoleRedirect } from '@/hooks/useRoleRedirect';
 import { firebaseConfig, hasFirebaseConfig } from '@/lib/firebase';
 import { theme } from '@/lib/theme/tokens';
 import { isDemoPhoneAuthEnabled, resolvePhoneAuthErrorMessage } from '@/services/auth';
@@ -29,7 +28,6 @@ export default function VerifyOtpScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(30);
   const usesDemoCode = isDemoPhoneAuthEnabled();
-  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal | null>(null);
 
   useEffect(() => {
     if (resendCountdown <= 0) {
@@ -64,7 +62,11 @@ export default function VerifyOtpScreen() {
 
     try {
       await verifyOtpCode(code);
-      router.replace('/role-select');
+      const nextSession = useSessionStore.getState();
+
+      router.replace(
+        resolveEntryPath(nextSession.authStatus, nextSession.currentRole, nextSession.pendingRoleSelection),
+      );
     } catch (error) {
       setErrorMessage(resolvePhoneAuthErrorMessage(error, 'verify'));
     } finally {
@@ -85,7 +87,6 @@ export default function VerifyOtpScreen() {
 
     try {
       await beginPhoneAuth(pendingPhoneDisplayNumber, {
-        appVerifier: recaptchaVerifier.current,
         forceResend: true,
       });
       setCode('');
@@ -148,13 +149,7 @@ export default function VerifyOtpScreen() {
           {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
         </Screen>
-        {hasFirebaseConfig && !usesDemoCode ? (
-          <FirebaseRecaptchaVerifierModal
-            attemptInvisibleVerification
-            firebaseConfig={firebaseConfig}
-            ref={recaptchaVerifier}
-          />
-        ) : null}
+        
       </View>
     </TouchableWithoutFeedback>
   );

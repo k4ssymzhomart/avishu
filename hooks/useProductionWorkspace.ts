@@ -73,10 +73,12 @@ function getFallbackProductionProfile(input: {
 
   const demoProfile = demoUsersByRole.production;
 
-  return buildUserProfile({
-    id: input.currentUserId ?? 'avishu-production-floor',
-    linkedFranchiseIds: demoProfile.linkedFranchiseIds ?? null,
-    name: input.fallbackName ?? demoProfile.name,
+    return buildUserProfile({
+      franchiseId: null,
+      franchiseName: null,
+      id: input.currentUserId ?? 'avishu-production-floor',
+      linkedFranchiseIds: demoProfile.linkedFranchiseIds ?? null,
+      name: input.fallbackName ?? demoProfile.name,
     phoneNumber: input.fallbackPhoneNumber ?? demoProfile.phoneNumber ?? null,
     productionUnitId: demoProfile.productionUnitId ?? demoProfile.id,
     productionUnitName: demoProfile.productionUnitName ?? demoProfile.name,
@@ -229,6 +231,8 @@ export function useProductionWorkspace() {
     }
 
     void ensureUserProfile({
+      franchiseId: null,
+      franchiseName: null,
       id: fallbackProfile.id,
       linkedFranchiseIds: fallbackProfile.linkedFranchiseIds ?? demoUsersByRole.production.linkedFranchiseIds ?? null,
       name: fallbackProfile.name,

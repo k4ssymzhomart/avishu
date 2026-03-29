@@ -1,11 +1,15 @@
 import { useEffect, useRef } from 'react';
 
-import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 
 import { subscribeToPhoneAuthState } from '@/services/auth';
-import { getUserProfile } from '@/services/users';
-import { registerDeviceForOrderNotifications, unregisterDeviceFromOrderNotifications } from '@/services/pushNotifications';
+import { findRegisteredUser } from '@/services/users';
+import {
+  canUseNativeNotifications,
+  getNotificationsModule,
+  registerDeviceForOrderNotifications,
+  unregisterDeviceFromOrderNotifications,
+} from '@/services/pushNotifications';
 import { useSessionStore } from '@/store/session';
 
 type RegisteredPushSession = {
@@ -32,7 +36,17 @@ export function AppRuntimeBridge() {
         return;
       }
 
-      const profile = await getUserProfile(user.id).catch(() => null);
+      const sessionState = useSessionStore.getState();
+
+      if (
+        sessionState.authMethod === 'phone' &&
+        sessionState.currentUserId === user.id &&
+        sessionState.authStatus !== 'guest'
+      ) {
+        return;
+      }
+
+      const profile = await findRegisteredUser(user.id).catch(() => null);
 
       if (!isActive) {
         return;
@@ -41,7 +55,7 @@ export function AppRuntimeBridge() {
       useSessionStore.getState().hydratePhoneSession({
         phoneNumber: profile?.phoneNumber ?? user.phoneNumber,
         userId: user.id,
-        userName: profile?.name ?? null,
+        userName: profile?.displayName ?? profile?.name ?? null,
         userRole: profile?.role ?? null,
       });
     });
@@ -53,26 +67,48 @@ export function AppRuntimeBridge() {
   }, []);
 
   useEffect(() => {
-    const redirect = (notification: Notifications.Notification) => {
-      const url = notification.request.content.data?.url;
-
-      if (typeof url === 'string' && url.length) {
-        router.push(url as never);
-      }
-    };
-
-    const response = Notifications.getLastNotificationResponse();
-
-    if (response?.notification) {
-      redirect(response.notification);
+    if (!canUseNativeNotifications()) {
+      return;
     }
 
-    const subscription = Notifications.addNotificationResponseReceivedListener((nextResponse) => {
-      redirect(nextResponse.notification);
-    });
+    let isMounted = true;
+    let subscription: { remove: () => void } | null = null;
+
+    const setupNotificationResponses = async () => {
+      const Notifications = await getNotificationsModule();
+
+      if (!Notifications || !isMounted) {
+        return;
+      }
+
+      const redirect = (notification: { request: { content: { data?: { url?: unknown } } } }) => {
+        const url = notification.request.content.data?.url;
+
+        if (typeof url === 'string' && url.length) {
+          router.push(url as never);
+        }
+      };
+
+      const response = await Notifications.getLastNotificationResponseAsync();
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (response?.notification) {
+        redirect(response.notification);
+      }
+
+      subscription = Notifications.addNotificationResponseReceivedListener((nextResponse) => {
+        redirect(nextResponse.notification);
+      });
+    };
+
+    void setupNotificationResponses();
 
     return () => {
-      subscription.remove();
+      isMounted = false;
+      subscription?.remove();
     };
   }, []);
 

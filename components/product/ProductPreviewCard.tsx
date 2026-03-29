@@ -10,11 +10,12 @@ import type { Product } from '@/types/product';
 
 type ProductPreviewCardProps = {
   isFavorite?: boolean;
+  language?: 'en' | 'ru';
   onPress?: () => void;
   product: Product;
 };
 
-export function ProductPreviewCard({ isFavorite = false, onPress, product }: ProductPreviewCardProps) {
+export function ProductPreviewCard({ isFavorite = false, language = 'en', onPress, product }: ProductPreviewCardProps) {
   const { width } = useWindowDimensions();
   const isWide = width >= 900;
 
@@ -31,24 +32,30 @@ export function ProductPreviewCard({ isFavorite = false, onPress, product }: Pro
 
         <View style={styles.copyBlock}>
           <View style={styles.topLine}>
-            <Text style={styles.category}>{product.category ?? 'Catalog'}</Text>
+            <Text style={styles.category}>{product.category ?? (language === 'ru' ? 'Каталог' : 'Catalog')}</Text>
             {isFavorite ? <FavoriteToggleButton isActive /> : null}
             <Badge
-              label={formatAvailability(product.availability)}
+              label={formatAvailability(product.availability, language)}
               variant={product.availability === 'preorder' ? 'muted' : 'outline'}
             />
           </View>
 
           <Text style={styles.name}>{product.name}</Text>
           <Text style={styles.collection}>
-            {product.collection ? `${product.collection} / AVISHU` : 'AVISHU / Women'}
+            {product.collection ? `${product.collection} / AVISHU` : language === 'ru' ? 'AVISHU / Женская линия' : 'AVISHU / Women'}
           </Text>
 
           <Divider />
 
           <View style={styles.footer}>
             <Text style={styles.meta}>
-              {product.preorderLeadDays ? `Lead time ${product.preorderLeadDays} days` : 'Available to place now'}
+              {product.preorderLeadDays
+                ? language === 'ru'
+                  ? `Срок ${product.preorderLeadDays} дн.`
+                  : `Lead time ${product.preorderLeadDays} days`
+                : language === 'ru'
+                  ? 'Доступно к оформлению сейчас'
+                  : 'Available to place now'}
             </Text>
             <Text style={styles.price}>{formatCurrency(product.price)}</Text>
           </View>

@@ -9,8 +9,11 @@ type CalendarDatePickerProps = {
   availableDates: string[];
   helper?: string;
   label: string;
+  locale?: 'en-US' | 'ru-RU';
   onSelect: (value: string) => void;
   selectedDate: string | null;
+  selectDateLabel?: string;
+  weekdayLabels?: string[];
 };
 
 type CalendarCell = {
@@ -20,17 +23,17 @@ type CalendarCell = {
   key: string;
 };
 
-const weekdayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
-
 function toDayKey(value: string | Date) {
   const date = value instanceof Date ? value : new Date(value);
-  const normalized = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
 
-  return normalized.toISOString().slice(0, 10);
+  return `${year}-${month}-${day}`;
 }
 
-function getMonthLabel(date: Date) {
-  return new Intl.DateTimeFormat('en-US', {
+function getMonthLabel(date: Date, locale: 'en-US' | 'ru-RU') {
+  return new Intl.DateTimeFormat(locale, {
     month: 'long',
     year: 'numeric',
   }).format(date);
@@ -61,8 +64,11 @@ export function CalendarDatePicker({
   availableDates,
   helper,
   label,
+  locale = 'en-US',
   onSelect,
   selectedDate,
+  selectDateLabel = 'Select a date',
+  weekdayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
 }: CalendarDatePickerProps) {
   const availableKeys = useMemo(
     () => new Set(availableDates.map((value) => toDayKey(value))),
@@ -86,9 +92,9 @@ export function CalendarDatePicker({
       .map(([, date]) => ({
         cells: buildMonthCells(date, availableKeys),
         key: `${date.getFullYear()}-${date.getMonth()}`,
-        label: getMonthLabel(date),
+        label: getMonthLabel(date, locale),
       }));
-  }, [availableDates, availableKeys]);
+  }, [availableDates, availableKeys, locale]);
 
   const selectedKey = selectedDate ? toDayKey(selectedDate) : null;
 
@@ -104,7 +110,7 @@ export function CalendarDatePicker({
           {helper ? <Text style={styles.helper}>{helper}</Text> : null}
         </View>
         <Text style={styles.selectedMeta}>
-          {selectedDate ? formatDateLabel(selectedDate, { withYear: true }) : 'Select a date'}
+          {selectedDate ? formatDateLabel(selectedDate, { language: locale === 'ru-RU' ? 'ru' : 'en', withYear: true }) : selectDateLabel}
         </Text>
       </View>
 
@@ -114,8 +120,8 @@ export function CalendarDatePicker({
             <Text style={styles.monthTitle}>{month.label}</Text>
 
             <View style={styles.weekdayRow}>
-              {weekdayLabels.map((weekday) => (
-                <View key={weekday} style={styles.weekdayCell}>
+              {weekdayLabels.map((weekday, index) => (
+                <View key={`${month.key}-${weekday}-${index}`} style={styles.weekdayCell}>
                   <Text style={styles.weekdayLabel}>{weekday}</Text>
                 </View>
               ))}
@@ -133,7 +139,7 @@ export function CalendarDatePicker({
                   <View key={cell.key} style={styles.gridCell}>
                     <Pressable
                       disabled={!cell.available}
-                      onPress={() => onSelect(cell.date.toISOString())}
+                      onPress={() => onSelect(cell.key)}
                       style={({ pressed }) => [
                         styles.dateButton,
                         cell.available ? styles.dateButtonAvailable : styles.dateButtonUnavailable,
@@ -262,6 +268,7 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.family.display,
     fontSize: theme.typography.size.lg,
     lineHeight: theme.typography.lineHeight.lg,
+    textTransform: 'capitalize',
   },
   selectedMeta: {
     color: theme.colors.text.secondary,

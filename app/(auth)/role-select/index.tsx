@@ -41,6 +41,14 @@ export default function RoleSelectScreen() {
     return <Redirect href="/verify" />;
   }
 
+  if (authStatus === 'authenticated' && currentRole) {
+    return <Redirect href={roleHomePaths[currentRole]} />;
+  }
+
+  if (pendingRoleSelection) {
+    return <Redirect href="/nickname" />;
+  }
+
   const backPath = authStatus === 'authenticated' && currentRole ? roleHomePaths[currentRole] : '/verify';
 
   const handleContinue = () => {
@@ -57,7 +65,7 @@ export default function RoleSelectScreen() {
           router.replace(backPath);
         }}
         showBackButton
-        subtitle="Choose the AVISHU workspace you want to enter. You can switch again later from demo mode."
+        subtitle="Choose the AVISHU workspace for this new profile."
         title="Choose your workspace."
       />
 

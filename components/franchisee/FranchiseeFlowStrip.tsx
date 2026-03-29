@@ -28,9 +28,7 @@ export function FranchiseeFlowStrip({ counts, tone = 'light' }: FranchiseeFlowSt
             tone === 'dark' ? styles.cellDark : null,
           ]}
         >
-          <Text style={[styles.value, tone === 'dark' ? styles.valueDark : null]}>
-            {counts[stage.status].toString().padStart(2, '0')}
-          </Text>
+          <Text style={[styles.value, tone === 'dark' ? styles.valueDark : null]}>{counts[stage.status]}</Text>
           <Text style={[styles.label, tone === 'dark' ? styles.labelDark : null]}>{getStatusLabel(stage.status)}</Text>
           {index < franchiseeFlowStages.length - 1 ? <Divider style={[styles.divider, tone === 'dark' ? styles.dividerDark : null]} /> : null}
         </View>

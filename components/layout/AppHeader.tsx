@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import { StyleSheet, Text, View } from 'react-native';
 
 import { BrandWordmark } from '@/components/brand/BrandWordmark';
@@ -11,14 +13,28 @@ type AppHeaderProps = {
   title: string;
   subtitle?: string;
   actionLabel?: string;
+  actionSlot?: ReactNode;
   onActionPress?: () => void;
   showBackButton?: boolean;
   onBackPress?: () => void;
 };
 
-export function AppHeader({ eyebrow, title, subtitle, actionLabel, onActionPress, showBackButton = false, onBackPress }: AppHeaderProps) {
+export function AppHeader({
+  eyebrow,
+  title,
+  subtitle,
+  actionLabel,
+  actionSlot,
+  onActionPress,
+  showBackButton = false,
+  onBackPress,
+}: AppHeaderProps) {
   const normalizedActionLabel = actionLabel?.trim().toLowerCase();
   const hideTrailingAction = showBackButton && !!normalizedActionLabel && ['back', 'close', 'назад'].includes(normalizedActionLabel);
+
+  const trailingAction =
+    actionSlot ??
+    (actionLabel && onActionPress && !hideTrailingAction ? <TextButton label={actionLabel} onPress={onActionPress} /> : null);
 
   return (
     <View style={styles.container}>
@@ -27,7 +43,7 @@ export function AppHeader({ eyebrow, title, subtitle, actionLabel, onActionPress
           {showBackButton && onBackPress ? <BackButton onPress={onBackPress} /> : null}
           <BrandWordmark size="sm" />
         </View>
-        {actionLabel && onActionPress && !hideTrailingAction ? <TextButton label={actionLabel} onPress={onActionPress} /> : null}
+        {trailingAction}
       </View>
 
       <View style={styles.copyBlock}>

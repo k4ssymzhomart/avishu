@@ -7,6 +7,7 @@ import { CheckoutHeader } from '@/components/customer/CheckoutHeader';
 import { CheckoutProductSummary } from '@/components/customer/CheckoutProductSummary';
 import { Screen } from '@/components/layout/Screen';
 import { Button } from '@/components/ui/Button';
+import { useCustomerI18n } from '@/hooks/useCustomerI18n';
 import { useProducts } from '@/hooks/useProducts';
 import { theme } from '@/lib/theme/tokens';
 import { formatCurrency } from '@/lib/utils/format';
@@ -16,6 +17,7 @@ import { useCartStore } from '@/store/cart';
 export default function CheckoutSizeScreen() {
   const router = useRouter();
   const { productId } = useLocalSearchParams<{ productId: string }>();
+  const { copy, formatAvailabilityLabel, language } = useCustomerI18n();
   const { products } = useProducts();
   const product = products.find((item) => item.id === productId);
   const { beginDirectCheckout, draft, saveItemToCart, updateDraft } = useCartStore();
@@ -29,8 +31,14 @@ export default function CheckoutSizeScreen() {
   if (!product) {
     return (
       <Screen scroll>
-        <CheckoutHeader currentStep={2} onBackPress={() => router.back()} title="Choose size" />
-        <Text style={styles.emptyText}>This product is no longer available.</Text>
+        <CheckoutHeader
+          currentStep={2}
+          eyebrow={copy.checkout.purchaseFlow}
+          onBackPress={() => router.back()}
+          stepLabel={copy.checkout.step}
+          title={copy.checkout.sizeTitle}
+        />
+        <Text style={styles.emptyText}>{copy.checkout.unavailableProduct}</Text>
       </Screen>
     );
   }
@@ -63,7 +71,7 @@ export default function CheckoutSizeScreen() {
         <View style={styles.footerActions}>
           <Button
             disabled={!selectedSize}
-            label="Add to cart"
+            label={copy.checkout.addToCart}
             onPress={handleAddToCart}
             size="sm"
             style={styles.footerButton}
@@ -71,7 +79,7 @@ export default function CheckoutSizeScreen() {
           />
           <Button
             disabled={!selectedSize}
-            label="Continue"
+            label={copy.checkout.continue}
             onPress={() => router.push(`/customer/checkout/delivery?productId=${product.id}`)}
             size="sm"
             style={styles.footerButton}
@@ -85,24 +93,26 @@ export default function CheckoutSizeScreen() {
     >
       <CheckoutHeader
         currentStep={2}
+        eyebrow={copy.checkout.purchaseFlow}
         onBackPress={() => router.back()}
-        subtitle="Select the preferred tone and size before delivery choices."
-        title="Choose size"
+        stepLabel={copy.checkout.step}
+        subtitle={copy.checkout.sizeSubtitle}
+        title={copy.checkout.sizeTitle}
       />
 
       <CheckoutProductSummary
         details={[
           product.collection ?? 'AVISHU',
-          product.availability === 'preorder' ? 'Preorder piece' : 'Ready now',
+          product.availability === 'preorder' ? copy.checkout.preorderPiece : copy.checkout.availableNow,
         ]}
-        eyebrow="Selected piece"
+        eyebrow={copy.checkout.selectedPiece}
         imageUrl={product.imageUrl}
         price={formatCurrency(product.price)}
         title={product.name}
       />
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Color / Tone</Text>
+        <Text style={styles.sectionLabel}>{copy.checkout.colorTone}</Text>
         <View style={styles.colorRow}>
           {meta.colors.map((color) => {
             const isSelected = (draft.colorId ?? meta.colors[0]?.id) === color.id;
@@ -127,7 +137,7 @@ export default function CheckoutSizeScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Size</Text>
+        <Text style={styles.sectionLabel}>{copy.checkout.size}</Text>
         <View style={styles.sizeGrid}>
           {meta.sizes.map((size) => {
             const isSelected = draft.size === size;
@@ -146,11 +156,11 @@ export default function CheckoutSizeScreen() {
       </View>
 
       <View style={styles.notePanel}>
-        <Text style={styles.noteTitle}>Selection note</Text>
+        <Text style={styles.noteTitle}>{copy.checkout.selectionNote}</Text>
         <Text style={styles.noteBody}>
           {product.availability === 'preorder'
-            ? 'Preferred ready date is confirmed in the delivery step.'
-            : 'Delivery and pickup choice comes next.'}
+            ? copy.checkout.selectionNotePreorder
+            : copy.checkout.selectionNoteBody}
         </Text>
       </View>
     </Screen>

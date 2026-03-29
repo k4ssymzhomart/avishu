@@ -13,7 +13,7 @@ export function BackButton(props: BackButtonProps) {
       {...props}
       style={({ pressed }) => [styles.button, pressed ? styles.pressed : null, props.disabled ? styles.disabled : null]}
     >
-      <AssetIcon color={theme.colors.text.primary} name="backArrow" size={16} />
+      <AssetIcon color={theme.colors.text.primary} name="backArrow" size={18} />
     </Pressable>
   );
 }

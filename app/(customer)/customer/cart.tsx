@@ -8,12 +8,14 @@ import { Screen } from '@/components/layout/Screen';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingState } from '@/components/ui/LoadingState';
+import { useCustomerI18n } from '@/hooks/useCustomerI18n';
 import { theme } from '@/lib/theme/tokens';
 import { formatCurrency, formatDateLabel } from '@/lib/utils/format';
 import { useCartStore } from '@/store/cart';
 
 export default function CustomerCartScreen() {
   const router = useRouter();
+  const { copy, language } = useCustomerI18n();
   const { beginCartCheckout, cartItems, hasHydratedCart, removeItem } = useCartStore();
 
   const total = useMemo(
@@ -24,15 +26,15 @@ export default function CustomerCartScreen() {
   return (
     <Screen maxContentWidth={820} scroll>
       <AppHeader
-        eyebrow="AVISHU / CART"
+        eyebrow={language === 'ru' ? 'AVISHU / КОРЗИНА' : 'AVISHU / CART'}
         onBackPress={() => router.back()}
         showBackButton
-        subtitle="Selected pieces stay here before delivery and payment."
-        title="Cart"
+        subtitle={copy.cart.subtitle}
+        title={copy.cart.title}
       />
 
       {!hasHydratedCart ? (
-        <LoadingState label="Loading cart" />
+        <LoadingState label={copy.cart.loading} />
       ) : cartItems.length ? (
         <>
           <View style={styles.list}>
@@ -49,7 +51,7 @@ export default function CustomerCartScreen() {
                     <Text style={styles.itemEyebrow}>{item.productCollection ?? 'AVISHU'}</Text>
                     <Text style={styles.itemTitle}>{item.productName}</Text>
                     <Text style={styles.itemMeta}>
-                      {[item.colorLabel, item.size, item.preferredReadyDate ? formatDateLabel(item.preferredReadyDate) : null]
+                      {[item.colorLabel, item.size, item.preferredReadyDate ? formatDateLabel(item.preferredReadyDate, { language }) : null]
                         .filter(Boolean)
                         .join(' / ')}
                     </Text>
@@ -58,7 +60,7 @@ export default function CustomerCartScreen() {
                 </View>
 
                 <Pressable onPress={() => removeItem(item.id)} style={styles.removeButton}>
-                  <Text style={styles.removeLabel}>Remove</Text>
+                  <Text style={styles.removeLabel}>{copy.cart.remove}</Text>
                 </Pressable>
               </View>
             ))}
@@ -66,31 +68,36 @@ export default function CustomerCartScreen() {
 
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Pieces</Text>
+              <Text style={styles.summaryLabel}>{copy.cart.pieces}</Text>
               <Text style={styles.summaryValue}>{cartItems.length}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Total</Text>
+              <Text style={styles.summaryLabel}>{copy.cart.total}</Text>
               <Text style={styles.summaryTotal}>{formatCurrency(total)}</Text>
             </View>
           </View>
 
           <View style={styles.actions}>
             <Button
-              label="Checkout"
+              label={copy.cart.checkout}
               onPress={() => {
                 beginCartCheckout();
                 router.push('/customer/checkout/delivery?mode=cart');
               }}
               style={styles.actionButton}
             />
-            <Button label="Continue shopping" onPress={() => router.replace('/customer')} style={styles.actionButton} variant="secondary" />
+            <Button
+              label={copy.cart.continueShopping}
+              onPress={() => router.replace('/customer')}
+              style={styles.actionButton}
+              variant="secondary"
+            />
           </View>
         </>
       ) : (
         <EmptyState
-          description="Add pieces from the product flow and they will appear here before checkout."
-          title="Cart is empty"
+          description={copy.cart.emptyDescription}
+          title={copy.cart.emptyTitle}
         />
       )}
     </Screen>

@@ -27,6 +27,8 @@ export default function NicknameScreen() {
   const pendingRoleSelection = useSessionStore((state) => state.pendingRoleSelection);
   const completeRoleSelection = useSessionStore((state) => state.completeRoleSelection);
   const [nickname, setNickname] = useState(currentUserName ?? '');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     setNickname(currentUserName ?? '');
@@ -48,15 +50,30 @@ export default function NicknameScreen() {
     return <Redirect href="/role-select" />;
   }
 
-  const handleContinue = () => {
-    completeRoleSelection(pendingRoleSelection, nickname);
-    router.replace(roleHomePaths[pendingRoleSelection]);
+  const handleContinue = async () => {
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      await completeRoleSelection(pendingRoleSelection, nickname);
+      router.replace(roleHomePaths[pendingRoleSelection]);
+    } catch (error) {
+      const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
+
+      setErrorMessage(
+        code === 'NICKNAME_TAKEN'
+          ? 'This nickname is already taken. Please choose another one.'
+          : "We couldn't save your profile right now. Please try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
       <View style={styles.wrapper}>
-        <Screen footer={<Button label="Enter app" onPress={handleContinue} />} scroll>
+        <Screen footer={<Button disabled={isSubmitting} label="Enter app" onPress={() => void handleContinue()} />} scroll>
           <AppHeader
             eyebrow="Step 2 of 2"
             onBackPress={() => router.replace('/role-select')}
@@ -81,6 +98,8 @@ export default function NicknameScreen() {
             returnKeyType="done"
             value={nickname}
           />
+
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
         </Screen>
       </View>
     </TouchableWithoutFeedback>
@@ -88,6 +107,11 @@ export default function NicknameScreen() {
 }
 
 const styles = StyleSheet.create({
+  errorText: {
+    color: theme.colors.text.secondary,
+    fontSize: theme.typography.size.sm,
+    lineHeight: theme.typography.lineHeight.sm,
+  },
   roleEyebrow: {
     color: theme.colors.text.secondary,
     fontSize: theme.typography.size.xs,

@@ -3,9 +3,12 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   increment,
+  limit,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
   where,
   writeBatch,
@@ -13,15 +16,20 @@ import {
 
 import { demoUsersByRole } from '@/lib/constants/demo';
 import { getFirestoreInstance } from '@/lib/firebase';
-import { applyCustomerLoyaltyReward } from '@/services/customerProfile';
+import { buildLoyaltySummary, calculateOrderLoyaltyReward, isCompletedOrderStatus } from '@/lib/utils/loyalty';
+import { getCachedFranchiseById, getDefaultFranchise } from '@/services/franchises';
+import { getCachedProductionUnitForFranchise } from '@/services/productionUnits';
 import { useDemoRealtimeStore } from '@/store/demoRealtime';
 import type { CreateOrderInput, FranchiseeOrderScope, Order, OrderStatus } from '@/types/order';
 
+const FRANCHISES_COLLECTION = 'franchises';
 const ORDERS_COLLECTION = 'orders';
 const ORDER_CHATS_COLLECTION = 'orderChats';
 const ORDER_MESSAGES_SUBCOLLECTION = 'messages';
+const PRODUCTION_UNITS_COLLECTION = 'production_units';
 const USERS_COLLECTION = 'users';
 const PRODUCTION_STATUSES: OrderStatus[] = ['accepted', 'in_production', 'ready'];
+const FRANCHISE_ACTIVE_STATUSES: OrderStatus[] = ['placed', 'accepted', 'in_production', 'ready', 'out_for_delivery'];
 
 type FirestoreOrderRecord = {
   branchId?: string | null;
@@ -33,6 +41,15 @@ type FirestoreOrderRecord = {
   delivery: Order['delivery'];
   franchiseId: string;
   id?: string;
+  loyalty?: {
+    awardedAt?: Timestamp | string | null;
+    awardedPoints?: number | null;
+    basePoints?: number | null;
+    bonusPoints?: number | null;
+    firstOrderBonusApplied?: boolean | null;
+    preorderBonusApplied?: boolean | null;
+    statusAtAward?: OrderStatus | null;
+  } | null;
   paymentMethod?: Order['paymentMethod'];
   preferredReadyDate?: string | null;
   productCollection?: string | null;
@@ -40,8 +57,10 @@ type FirestoreOrderRecord = {
   productImageUrl?: string | null;
   productName: string;
   productPrice: number;
+  productionUnitId?: string | null;
   productionNote?: string | null;
   productionNoteUpdatedAt?: Timestamp | string | null;
+  productionUnitName?: string | null;
   selectedColorId?: string | null;
   selectedColorLabel?: string | null;
   selectedSize?: string | null;
@@ -58,6 +77,31 @@ type FirestoreOrderRecord = {
   type: Order['type'];
   updatedAt: Timestamp | string | null;
 };
+
+type FirestoreCustomerRecord = {
+  addresses?: unknown[] | null;
+  assignedFranchiseId?: string | null;
+  assignedFranchiseName?: string | null;
+  createdAt?: Timestamp | string | null;
+  displayName?: string | null;
+  loyalty?: {
+    lifetimeSpent?: number | null;
+    points?: number | null;
+    totalOrders?: number | null;
+  } | null;
+  phone?: string | null;
+  role?: 'customer' | 'franchisee' | 'production' | null;
+  uid?: string | null;
+};
+
+type RoutingMetadata = {
+  branchId: string | null;
+  branchName: string | null;
+  productionUnitId: string | null;
+  productionUnitName: string | null;
+};
+
+type ResolvedCreateOrderInput = CreateOrderInput & RoutingMetadata;
 
 function toIsoString(value: Timestamp | string | null | undefined) {
   if (!value) {
@@ -91,6 +135,17 @@ function normalizeOrder(record: FirestoreOrderRecord, fallbackId: string) {
     },
     franchiseId: record.franchiseId,
     id: record.id ?? fallbackId,
+    loyalty: record.loyalty
+      ? {
+          awardedAt: record.loyalty.awardedAt ? toIsoString(record.loyalty.awardedAt) : null,
+          awardedPoints: Math.max(0, Math.round(record.loyalty.awardedPoints ?? 0)),
+          basePoints: Math.max(0, Math.round(record.loyalty.basePoints ?? 0)),
+          bonusPoints: Math.max(0, Math.round(record.loyalty.bonusPoints ?? 0)),
+          firstOrderBonusApplied: !!record.loyalty.firstOrderBonusApplied,
+          preorderBonusApplied: !!record.loyalty.preorderBonusApplied,
+          statusAtAward: record.loyalty.statusAtAward ?? record.status,
+        }
+      : null,
     paymentMethod: record.paymentMethod ?? null,
     preferredReadyDate: record.preferredReadyDate ?? null,
     productCollection: record.productCollection ?? null,
@@ -98,8 +153,10 @@ function normalizeOrder(record: FirestoreOrderRecord, fallbackId: string) {
     productImageUrl: record.productImageUrl ?? null,
     productName: record.productName,
     productPrice: record.productPrice,
+    productionUnitId: record.productionUnitId ?? null,
     productionNote: record.productionNote?.trim().length ? record.productionNote.trim() : null,
     productionNoteUpdatedAt: record.productionNoteUpdatedAt ? toIsoString(record.productionNoteUpdatedAt) : null,
+    productionUnitName: record.productionUnitName ?? null,
     selectedColorId: record.selectedColorId ?? null,
     selectedColorLabel: record.selectedColorLabel ?? null,
     selectedSize: record.selectedSize ?? null,
@@ -126,7 +183,18 @@ function subscribeToDemoOrders(filter: (order: Order) => boolean, onOrders: (ord
   });
 }
 
-function statusMessage(status: OrderStatus) {
+function isFranchiseActiveStatus(status: OrderStatus) {
+  return FRANCHISE_ACTIVE_STATUSES.includes(status);
+}
+
+function isProductionActiveStatus(status: OrderStatus) {
+  return PRODUCTION_STATUSES.includes(status);
+}
+
+function statusMessage(
+  status: OrderStatus,
+  senderRole: 'customer' | 'support' | 'franchisee' | 'production' = 'support',
+) {
   if (status === 'accepted') {
     return 'Boutique confirmed your order and queued it for production.';
   }
@@ -148,14 +216,12 @@ function statusMessage(status: OrderStatus) {
   }
 
   if (status === 'cancelled') {
-    return 'Your order was cancelled. Boutique support will follow up if needed.';
+    return senderRole === 'customer'
+      ? 'The customer cancelled this order. Boutique support can follow up in chat if needed.'
+      : 'Your order was cancelled. Boutique support will follow up if needed.';
   }
 
   return 'Your order is placed. Boutique confirmation is in progress.';
-}
-
-function timelineUpdate(status: OrderStatus) {
-  return buildTimelinePatch(status, null);
 }
 
 function buildTimelinePatch(
@@ -247,10 +313,11 @@ function buildTimelinePatch(
 
 function resolveBranchScope(input: Pick<CreateOrderInput, 'branchId' | 'branchName' | 'franchiseId'>) {
   const demoFranchisee = demoUsersByRole.franchisee;
+  const cachedFranchise = getCachedFranchiseById(input.franchiseId);
 
   return {
-    branchId: input.branchId ?? demoFranchisee.branchId ?? input.franchiseId,
-    branchName: input.branchName ?? demoFranchisee.branchName ?? demoFranchisee.name,
+    branchId: input.branchId ?? cachedFranchise?.id ?? demoFranchisee.branchId ?? input.franchiseId,
+    branchName: input.branchName ?? cachedFranchise?.name ?? demoFranchisee.branchName ?? demoFranchisee.name,
   };
 }
 
@@ -268,10 +335,6 @@ function resolveFranchiseeScope(scopeOrFranchiseId: FranchiseeOrderScope | strin
   };
 }
 
-function rewardPointsForOrderTotal(total: number) {
-  return Math.max(40, Math.round(total / 300));
-}
-
 function getOrderMessagesCollection(orderId: string) {
   const firestore = getFirestoreInstance();
 
@@ -282,20 +345,92 @@ function getOrderMessagesCollection(orderId: string) {
   return collection(doc(firestore, ORDERS_COLLECTION, orderId), ORDER_MESSAGES_SUBCOLLECTION);
 }
 
+async function resolveRoutingMetadata(
+  firestore: NonNullable<ReturnType<typeof getFirestoreInstance>> | null,
+  input: CreateOrderInput,
+): Promise<RoutingMetadata> {
+  const branchScope = resolveBranchScope(input);
+  let branchName = branchScope.branchName;
+  let productionUnitId = input.productionUnitId ?? null;
+  let productionUnitName = input.productionUnitName ?? null;
+
+  const cachedFranchise = getCachedFranchiseById(input.franchiseId);
+  const cachedProductionUnit = getCachedProductionUnitForFranchise(input.franchiseId);
+
+  branchName = branchName ?? cachedFranchise?.name ?? null;
+  productionUnitId = productionUnitId ?? cachedProductionUnit?.id ?? demoUsersByRole.production.productionUnitId ?? null;
+  productionUnitName =
+    productionUnitName ?? cachedProductionUnit?.name ?? demoUsersByRole.production.productionUnitName ?? null;
+
+  if (!firestore) {
+    return {
+      branchId: branchScope.branchId ?? input.franchiseId,
+      branchName,
+      productionUnitId,
+      productionUnitName,
+    };
+  }
+
+  if (!branchName || !productionUnitId || !productionUnitName) {
+    const franchiseSnapshot = await getDoc(doc(firestore, FRANCHISES_COLLECTION, input.franchiseId));
+
+    if (franchiseSnapshot.exists()) {
+      const franchiseData = franchiseSnapshot.data() as {
+        id?: string | null;
+        name?: string | null;
+        productionLinked?: string[] | null;
+      };
+
+      branchName = branchName ?? franchiseData.name ?? branchScope.branchName ?? null;
+
+      if (!productionUnitId) {
+        productionUnitId = franchiseData.productionLinked?.find(Boolean) ?? null;
+      }
+    }
+  }
+
+  if (!productionUnitId && firestore) {
+    const unitSnapshot = await getDocs(
+      query(collection(firestore, PRODUCTION_UNITS_COLLECTION), where('linkedFranchises', 'array-contains', input.franchiseId), limit(1)),
+    );
+
+    if (!unitSnapshot.empty) {
+      const unitDoc = unitSnapshot.docs[0];
+      const unitData = unitDoc.data() as { name?: string | null };
+
+      productionUnitId = unitDoc.id;
+      productionUnitName = productionUnitName ?? unitData.name ?? null;
+    }
+  } else if (productionUnitId && !productionUnitName) {
+    const unitSnapshot = await getDoc(doc(firestore, PRODUCTION_UNITS_COLLECTION, productionUnitId));
+
+    if (unitSnapshot.exists()) {
+      const unitData = unitSnapshot.data() as { name?: string | null };
+      productionUnitName = unitData.name ?? null;
+    }
+  }
+
+  return {
+    branchId: branchScope.branchId ?? input.franchiseId,
+    branchName: branchName ?? branchScope.branchName ?? null,
+    productionUnitId,
+    productionUnitName,
+  };
+}
+
 function queueOrderCreation(
   firestore: NonNullable<ReturnType<typeof getFirestoreInstance>>,
   batch: ReturnType<typeof writeBatch>,
   orderRef: ReturnType<typeof doc>,
-  input: CreateOrderInput,
+  input: ResolvedCreateOrderInput,
 ) {
-  const branchScope = resolveBranchScope(input);
   const supportMessage = statusMessage('placed');
   const orderMessagesCollection = collection(doc(firestore, ORDERS_COLLECTION, orderRef.id), ORDER_MESSAGES_SUBCOLLECTION);
   const messageRef = doc(orderMessagesCollection);
 
   batch.set(orderRef, {
-    branchId: branchScope.branchId,
-    branchName: branchScope.branchName,
+    branchId: input.branchId,
+    branchName: input.branchName,
     createdAt: serverTimestamp(),
     customerId: input.customerId,
     customerName: input.customerName,
@@ -310,8 +445,10 @@ function queueOrderCreation(
     productImageUrl: input.productImageUrl ?? null,
     productName: input.productName,
     productPrice: input.productPrice,
+    productionUnitId: input.productionUnitId ?? null,
     productionNote: null,
     productionNoteUpdatedAt: null,
+    productionUnitName: input.productionUnitName ?? null,
     selectedColorId: input.selectedColorId ?? null,
     selectedColorLabel: input.selectedColorLabel ?? null,
     selectedSize: input.selectedSize ?? null,
@@ -330,8 +467,8 @@ function queueOrderCreation(
   });
 
   batch.set(doc(firestore, ORDER_CHATS_COLLECTION, orderRef.id), {
-    branchId: branchScope.branchId,
-    branchName: branchScope.branchName,
+    branchId: input.branchId,
+    branchName: input.branchName,
     customerId: input.customerId,
     customerName: input.customerName,
     customerPhoneNumber: input.customerPhoneNumber ?? null,
@@ -351,9 +488,22 @@ function queueOrderCreation(
     doc(firestore, USERS_COLLECTION, input.customerId),
     {
       displayName: input.customerName,
+      assignedFranchiseId: input.franchiseId,
+      assignedFranchiseName: input.branchName ?? null,
       phone: input.customerPhoneNumber ?? null,
       role: 'customer',
       uid: input.customerId,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+
+  batch.set(
+    doc(firestore, FRANCHISES_COLLECTION, input.franchiseId),
+    {
+      activeOrdersCount: increment(1),
+      id: input.franchiseId,
+      name: input.branchName ?? 'AVISHU Boutique',
       updatedAt: serverTimestamp(),
     },
     { merge: true },
@@ -374,23 +524,19 @@ export async function createOrder(input: CreateOrderInput) {
   const firestore = getFirestoreInstance();
 
   if (!firestore) {
-    return useDemoRealtimeStore.getState().createOrder(input).id;
+    const routing = await resolveRoutingMetadata(null, input);
+    return useDemoRealtimeStore.getState().createOrder({ ...input, ...routing }).id;
   }
 
+  const resolvedInput = {
+    ...input,
+    ...(await resolveRoutingMetadata(firestore, input)),
+  } satisfies ResolvedCreateOrderInput;
   const orderRef = doc(collection(firestore, ORDERS_COLLECTION));
   const batch = writeBatch(firestore);
-  queueOrderCreation(firestore, batch, orderRef, input);
+  queueOrderCreation(firestore, batch, orderRef, resolvedInput);
 
   await batch.commit();
-  await applyCustomerLoyaltyReward(
-    {
-      displayName: input.customerName,
-      phone: input.customerPhoneNumber ?? null,
-      role: 'customer',
-      uid: input.customerId,
-    },
-    rewardPointsForOrderTotal(input.productPrice),
-  );
 
   return orderRef.id;
 }
@@ -403,32 +549,35 @@ export async function createOrders(inputs: CreateOrderInput[]) {
   const firestore = getFirestoreInstance();
 
   if (!firestore) {
-    return inputs.map((input) => useDemoRealtimeStore.getState().createOrder(input).id);
+    const resolvedInputs = await Promise.all(
+      inputs.map(async (input) => {
+        return {
+          ...input,
+          ...(await resolveRoutingMetadata(null, input)),
+        } satisfies ResolvedCreateOrderInput;
+      }),
+    );
+    return resolvedInputs.map((input) => useDemoRealtimeStore.getState().createOrder(input).id);
   }
 
+  const resolvedInputs = await Promise.all(
+    inputs.map(async (input) => {
+      return {
+        ...input,
+        ...(await resolveRoutingMetadata(firestore, input)),
+      } satisfies ResolvedCreateOrderInput;
+    }),
+  );
   const batch = writeBatch(firestore);
   const orderIds: string[] = [];
 
-  inputs.forEach((input) => {
+  resolvedInputs.forEach((input) => {
     const orderRef = doc(collection(firestore, ORDERS_COLLECTION));
     orderIds.push(orderRef.id);
     queueOrderCreation(firestore, batch, orderRef, input);
   });
 
   await batch.commit();
-
-  const seedInput = inputs[0];
-  const orderTotal = inputs.reduce((sum, input) => sum + input.productPrice, 0);
-
-  await applyCustomerLoyaltyReward(
-    {
-      displayName: seedInput.customerName,
-      phone: seedInput.customerPhoneNumber ?? null,
-      role: 'customer',
-      uid: seedInput.customerId,
-    },
-    rewardPointsForOrderTotal(orderTotal),
-  );
 
   return orderIds;
 }
@@ -525,76 +674,208 @@ export async function updateOrderStatus(
     branchId?: string | null;
     branchName?: string | null;
     franchiseId?: string | null;
+    productionUnitId?: string | null;
+    productionUnitName?: string | null;
     senderId?: string | null;
     senderName?: string | null;
-    senderRole?: 'support' | 'franchisee' | 'production';
+    senderRole?: 'customer' | 'support' | 'franchisee' | 'production';
   },
 ) {
   const firestore = getFirestoreInstance();
 
   if (!firestore) {
-    useDemoRealtimeStore.getState().updateOrderStatus(orderId, status);
+    useDemoRealtimeStore.getState().updateOrderStatus(orderId, status, options);
     return;
   }
 
   const orderRef = doc(firestore, ORDERS_COLLECTION, orderId);
-  const orderSnapshot = await getDoc(orderRef);
-  const currentOrder = orderSnapshot.exists() ? (orderSnapshot.data() as FirestoreOrderRecord) : null;
   const orderMessagesCollection = getOrderMessagesCollection(orderId);
   const messageRef = orderMessagesCollection ? doc(orderMessagesCollection) : null;
-  const note = statusMessage(status);
-  const batch = writeBatch(firestore);
   const senderRole = options?.senderRole ?? 'support';
+  const note = statusMessage(status, senderRole);
   const senderName =
     options?.senderName ??
-    (senderRole === 'franchisee' ? 'AVISHU Boutique' : senderRole === 'production' ? 'AVISHU Atelier' : 'AVISHU Care');
+    (senderRole === 'franchisee'
+      ? 'AVISHU Boutique'
+      : senderRole === 'production'
+        ? 'AVISHU Atelier'
+        : senderRole === 'customer'
+          ? 'Customer'
+          : 'AVISHU Care');
   const senderId =
     options?.senderId ??
     (senderRole === 'franchisee'
       ? 'avishu-franchisee'
       : senderRole === 'production'
         ? 'avishu-production-floor'
-        : 'avishu-support');
-  const orderPatch = {
-    ...(options?.branchId !== undefined ? { branchId: options.branchId } : null),
-    ...(options?.branchName !== undefined ? { branchName: options.branchName } : null),
-    status,
-    updatedAt: serverTimestamp(),
-    ...buildTimelinePatch(status, currentOrder?.timeline),
-  };
+        : senderRole === 'customer'
+          ? 'avishu-customer'
+          : 'avishu-support');
 
-  batch.update(orderRef, orderPatch);
+  await runTransaction(firestore, async (transaction) => {
+    const orderSnapshot = await transaction.get(orderRef);
 
-  batch.set(
-    doc(firestore, ORDER_CHATS_COLLECTION, orderId),
-    {
-      ...(options?.branchId !== undefined ? { branchId: options.branchId } : null),
-      ...(options?.branchName !== undefined ? { branchName: options.branchName } : null),
-      ...(options?.franchiseId !== undefined ? { franchiseId: options.franchiseId } : null),
-      id: orderId,
-      orderId,
-      orderStatus: status,
-      lastMessageAt: serverTimestamp(),
-      lastMessageText: note,
-      unreadCountForCustomer: increment(1),
+    if (!orderSnapshot.exists()) {
+      throw new Error('ORDER_NOT_FOUND');
+    }
+
+    const currentOrder = orderSnapshot.data() as FirestoreOrderRecord;
+    const resolvedFranchiseId = options?.franchiseId ?? currentOrder.franchiseId;
+    const resolvedProductionUnitId =
+      options?.productionUnitId ??
+      currentOrder.productionUnitId ??
+      getCachedProductionUnitForFranchise(resolvedFranchiseId)?.id ??
+      null;
+    const resolvedProductionUnitName =
+      options?.productionUnitName ??
+      currentOrder.productionUnitName ??
+      (resolvedProductionUnitId ? getCachedProductionUnitForFranchise(resolvedFranchiseId)?.name ?? null : null);
+    const previousFranchiseActive = isFranchiseActiveStatus(currentOrder.status);
+    const nextFranchiseActive = isFranchiseActiveStatus(status);
+    const previousProductionActive = isProductionActiveStatus(currentOrder.status);
+    const nextProductionActive = isProductionActiveStatus(status);
+    const needsFranchiseCounterChange =
+      currentOrder.status !== status && previousFranchiseActive !== nextFranchiseActive;
+    const franchiseRef = needsFranchiseCounterChange ? doc(firestore, FRANCHISES_COLLECTION, resolvedFranchiseId) : null;
+    const franchiseSnapshot = franchiseRef && needsFranchiseCounterChange ? await transaction.get(franchiseRef) : null;
+    const needsProductionCounterChange =
+      Boolean(resolvedProductionUnitId) &&
+      currentOrder.status !== status &&
+      previousProductionActive !== nextProductionActive;
+    const productionUnitRef =
+      resolvedProductionUnitId && needsProductionCounterChange
+        ? doc(firestore, PRODUCTION_UNITS_COLLECTION, resolvedProductionUnitId)
+        : null;
+    const productionUnitSnapshot =
+      productionUnitRef && needsProductionCounterChange ? await transaction.get(productionUnitRef) : null;
+    const orderPatch: Record<string, unknown> = {
+      ...(options?.branchId !== undefined ? { branchId: options.branchId } : {}),
+      ...(options?.branchName !== undefined ? { branchName: options.branchName } : {}),
+      ...(resolvedProductionUnitId ? { productionUnitId: resolvedProductionUnitId } : {}),
+      ...(resolvedProductionUnitName ? { productionUnitName: resolvedProductionUnitName } : {}),
+      status,
       updatedAt: serverTimestamp(),
-    },
-    { merge: true },
-  );
+      ...buildTimelinePatch(status, currentOrder.timeline),
+    };
 
-  if (messageRef) {
-    batch.set(messageRef, {
-      createdAt: serverTimestamp(),
-      id: messageRef.id,
-      orderId,
-      senderId,
-      senderName,
-      senderRole,
-      text: note,
-    });
-  }
+    if (isCompletedOrderStatus(status) && !currentOrder.loyalty?.awardedAt) {
+      const profileRef = doc(firestore, USERS_COLLECTION, currentOrder.customerId);
+      const profileSnapshot = await transaction.get(profileRef);
+      const currentProfile = profileSnapshot.exists() ? (profileSnapshot.data() as FirestoreCustomerRecord) : null;
+      const currentPoints = Math.max(0, Math.round(currentProfile?.loyalty?.points ?? 0));
+      const currentLifetimeSpent = Math.max(0, Math.round(currentProfile?.loyalty?.lifetimeSpent ?? 0));
+      const currentTotalOrders = Math.max(0, Math.round(currentProfile?.loyalty?.totalOrders ?? 0));
+      const reward = calculateOrderLoyaltyReward({
+        amountKzt: currentOrder.productPrice,
+        completedOrdersBefore: currentTotalOrders,
+        type: currentOrder.type,
+      });
+      const nextLoyalty = buildLoyaltySummary({
+        lifetimeSpent: currentLifetimeSpent + currentOrder.productPrice,
+        points: currentPoints + reward.awardedPoints,
+        totalOrders: currentTotalOrders + 1,
+      });
+      const profileDisplayName =
+        currentProfile?.displayName?.trim().length ? currentProfile.displayName.trim() : currentOrder.customerName;
 
-  await batch.commit();
+      transaction.set(
+        profileRef,
+        {
+          ...(profileSnapshot.exists()
+            ? {}
+            : {
+                addresses: Array.isArray(currentProfile?.addresses) ? currentProfile.addresses : [],
+                createdAt: serverTimestamp(),
+              }),
+          displayName: profileDisplayName || 'AVISHU Client',
+          loyalty: nextLoyalty,
+          phone: currentProfile?.phone ?? currentOrder.customerPhoneNumber ?? null,
+          role: currentProfile?.role ?? 'customer',
+          uid: currentOrder.customerId,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      orderPatch.loyalty = {
+        awardedAt: serverTimestamp(),
+        awardedPoints: reward.awardedPoints,
+        basePoints: reward.basePoints,
+        bonusPoints: reward.bonusPoints,
+        firstOrderBonusApplied: reward.firstOrderBonusApplied,
+        preorderBonusApplied: reward.preorderBonusApplied,
+        statusAtAward: status,
+      };
+    }
+
+    if (resolvedFranchiseId && franchiseRef && franchiseSnapshot && needsFranchiseCounterChange) {
+      const currentActiveOrdersCount = Math.max(
+        0,
+        Math.round((franchiseSnapshot.exists() ? franchiseSnapshot.data()?.activeOrdersCount : 0) ?? 0),
+      );
+      const nextActiveOrdersCount = Math.max(0, currentActiveOrdersCount + (nextFranchiseActive ? 1 : -1));
+
+      transaction.set(
+        franchiseRef,
+        {
+          activeOrdersCount: nextActiveOrdersCount,
+          id: resolvedFranchiseId,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    }
+
+    if (resolvedProductionUnitId && productionUnitRef && productionUnitSnapshot && needsProductionCounterChange) {
+      const currentActiveTasks = Math.max(
+        0,
+        Math.round((productionUnitSnapshot.exists() ? productionUnitSnapshot.data()?.activeTasks : 0) ?? 0),
+      );
+      const nextActiveTasks = Math.max(0, currentActiveTasks + (nextProductionActive ? 1 : -1));
+
+      transaction.set(
+        productionUnitRef,
+        {
+          activeTasks: nextActiveTasks,
+          id: resolvedProductionUnitId,
+          status: nextActiveTasks > 0 ? 'busy' : 'active',
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    }
+
+    transaction.update(orderRef, orderPatch);
+
+    transaction.set(
+      doc(firestore, ORDER_CHATS_COLLECTION, orderId),
+      {
+        ...(options?.branchId !== undefined ? { branchId: options.branchId } : {}),
+        ...(options?.branchName !== undefined ? { branchName: options.branchName } : {}),
+        ...(options?.franchiseId !== undefined ? { franchiseId: options.franchiseId } : {}),
+        id: orderId,
+        orderId,
+        orderStatus: status,
+        lastMessageAt: serverTimestamp(),
+        lastMessageText: note,
+        unreadCountForCustomer: increment(1),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    if (messageRef) {
+      transaction.set(messageRef, {
+        createdAt: serverTimestamp(),
+        id: messageRef.id,
+        orderId,
+        senderId,
+        senderName,
+        senderRole,
+        text: note,
+      });
+    }
+  });
 }
 
 export async function updateProductionNote(orderId: string, note: string) {
@@ -618,5 +899,5 @@ export async function updateProductionNote(orderId: string, note: string) {
 }
 
 export function getDefaultFranchiseId() {
-  return demoUsersByRole.franchisee.id;
+  return getDefaultFranchise()?.id ?? demoUsersByRole.franchisee.id;
 }

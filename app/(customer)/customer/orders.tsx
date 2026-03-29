@@ -1,9 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { useRouter } from 'expo-router';
 import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
-import { AssetIcon } from '@/components/icons/AssetIcon';
 import { Screen } from '@/components/layout/Screen';
 import { RoleBottomNav } from '@/components/navigation/RoleBottomNav';
 import { CustomerOrderTracker } from '@/components/order/CustomerOrderTracker';
@@ -12,27 +11,13 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingState } from '@/components/ui/LoadingState';
+import { useCustomerI18n } from '@/hooks/useCustomerI18n';
 import { useCustomerOrders } from '@/hooks/useOrders';
-import { customerBottomNav } from '@/lib/constants/navigation';
 import { theme } from '@/lib/theme/tokens';
-import {
-  formatCurrency,
-  formatDateLabel,
-  formatDeliveryMethod,
-  formatOrderStatus,
-  formatRelativeTime,
-} from '@/lib/utils/format';
+import { formatCurrency } from '@/lib/utils/format';
+import { updateOrderStatus } from '@/services/orders';
 import { useSessionStore } from '@/store/session';
 import type { Order, OrderStatus } from '@/types/order';
-
-const orderSteps = [
-  { key: 'placed', label: 'Placed' },
-  { key: 'accepted', label: 'Accepted' },
-  { key: 'in_production', label: 'In production' },
-  { key: 'ready', label: 'Ready' },
-  { key: 'out_for_delivery', label: 'Out for delivery' },
-  { key: 'delivered', label: 'Delivered' },
-] as const;
 
 function resolveStatusVariant(status: OrderStatus) {
   if (status === 'out_for_delivery' || status === 'ready') {
@@ -50,37 +35,8 @@ function resolveStatusVariant(status: OrderStatus) {
   return 'outline' as const;
 }
 
-function resolveOrderNote(order: Order) {
-  if (order.status === 'placed') {
-    return 'Your order is recorded and waiting for boutique confirmation.';
-  }
-
-  if (order.status === 'accepted') {
-    return 'Boutique support has accepted the request and is preparing the next handoff.';
-  }
-
-  if (order.status === 'in_production') {
-    return order.productionNote ?? 'The atelier is working through production steps now.';
-  }
-
-  if (order.status === 'ready') {
-    return 'Your piece is completed and prepared for pickup or courier handoff.';
-  }
-
-  if (order.status === 'out_for_delivery') {
-    return order.delivery.note ?? 'Courier handoff is active and the final delivery window is underway.';
-  }
-
-  if (order.status === 'cancelled') {
-    return 'This order was cancelled. Any follow-up details remain available in the support thread.';
-  }
-
-  return order.delivery.note ?? 'This order has been completed and archived to your history.';
-}
-
 function getLayout(width: number) {
   const isDesktop = width >= 1180;
-  const isTablet = width >= 780;
   const maxContentWidth = width >= 1360 ? 1240 : width >= 1180 ? 1140 : width >= 780 ? 940 : undefined;
   const contentWidth = Math.min(width - theme.spacing.xl * 2, maxContentWidth ?? width - theme.spacing.xl * 2);
   const sectionGap = theme.spacing.lg;
@@ -90,43 +46,51 @@ function getLayout(width: number) {
       ? (contentWidth - sectionGap * (columnCount - 1)) / columnCount
       : contentWidth;
 
-  return { cardWidth, columnCount, contentWidth, isDesktop, isTablet, maxContentWidth, sectionGap };
-}
-
-function OrderStageStrip({ status }: { status: OrderStatus }) {
-  const activeIndex = orderSteps.findIndex((step) => step.key === status);
-
-  return (
-    <View style={styles.stageStrip}>
-      {orderSteps.map((step, index) => {
-        const isActive = index <= activeIndex;
-
-        return (
-          <View key={step.key} style={styles.stageItem}>
-            <View style={[styles.stageDot, isActive ? styles.stageDotActive : null]} />
-            <Text numberOfLines={1} style={[styles.stageLabel, isActive ? styles.stageLabelActive : null]}>
-              {step.label}
-            </Text>
-          </View>
-        );
-      })}
-    </View>
-  );
+  return { cardWidth, isDesktop, maxContentWidth, sectionGap };
 }
 
 function OrderSurfaceCard({
   actionLabel,
+  addressFallback,
+  formatDateLabel,
+  formatDeliveryMethodLabel,
+  formatOrderNote,
+  formatOrderStatusLabel,
+  formatRelativeLabel,
+  isSecondaryDisabled = false,
+  noteLabel,
   onActionPress,
+  onSecondaryActionPress,
   order,
   secondaryActionLabel,
-  onSecondaryActionPress,
+  statusLanguage,
+  uiCopy,
 }: {
   actionLabel: string;
+  addressFallback: string;
+  formatDateLabel: (value?: string | null, withYear?: boolean) => string;
+  formatDeliveryMethodLabel: (method: Order['delivery']['method']) => string;
+  formatOrderNote: (status: OrderStatus, productionNote?: string | null, deliveryNote?: string | null) => string;
+  formatOrderStatusLabel: (status: OrderStatus) => string;
+  formatRelativeLabel: (value: string) => string;
+  isSecondaryDisabled?: boolean;
+  noteLabel: string;
   onActionPress: () => void;
+  onSecondaryActionPress?: () => void;
   order: Order;
   secondaryActionLabel?: string;
-  onSecondaryActionPress?: () => void;
+  statusLanguage: 'en' | 'ru';
+  uiCopy: {
+    addressSummary: string;
+    delivery: string;
+    readyFallback: string;
+    readyTarget: string;
+    updated: string;
+  };
 }) {
+  const readyTarget =
+    order.preferredReadyDate ? formatDateLabel(order.preferredReadyDate, true) : uiCopy.readyFallback;
+
   return (
     <Card padding="lg" style={styles.orderCard}>
       {order.productImageUrl ? (
@@ -139,42 +103,51 @@ function OrderSurfaceCard({
         <View style={styles.orderHeaderCopy}>
           <Text style={styles.orderEyebrow}>{order.id}</Text>
           <Text style={styles.orderTitle}>{order.productName}</Text>
-          <Text style={styles.orderSubcopy}>{`${formatCurrency(order.productPrice)} / ${formatDeliveryMethod(order.delivery.method)}`}</Text>
+          <Text style={styles.orderSubcopy}>
+            {`${formatCurrency(order.productPrice)} / ${formatDeliveryMethodLabel(order.delivery.method)}`}
+          </Text>
         </View>
-        <Badge label={formatOrderStatus(order.status)} variant={resolveStatusVariant(order.status)} />
+        <Badge label={formatOrderStatusLabel(order.status)} variant={resolveStatusVariant(order.status)} />
       </View>
 
-      <OrderStageStrip status={order.status} />
+      <CustomerOrderTracker language={statusLanguage} status={order.status} />
 
       <View style={styles.metaGrid}>
         <View style={styles.metaTile}>
-          <Text style={styles.metaLabel}>Updated</Text>
-          <Text style={styles.metaValue}>{formatRelativeTime(order.updatedAt)}</Text>
+          <Text style={styles.metaLabel}>{uiCopy.updated}</Text>
+          <Text style={styles.metaValue}>{formatRelativeLabel(order.updatedAt)}</Text>
         </View>
         <View style={styles.metaTile}>
-          <Text style={styles.metaLabel}>Delivery</Text>
-          <Text style={styles.metaValue}>{formatDeliveryMethod(order.delivery.method)}</Text>
+          <Text style={styles.metaLabel}>{uiCopy.delivery}</Text>
+          <Text style={styles.metaValue}>{formatDeliveryMethodLabel(order.delivery.method)}</Text>
         </View>
         <View style={styles.metaTile}>
-          <Text style={styles.metaLabel}>Ready target</Text>
-          <Text style={styles.metaValue}>
-            {order.preferredReadyDate ? formatDateLabel(order.preferredReadyDate) : 'Boutique confirmed'}
-          </Text>
+          <Text style={styles.metaLabel}>{uiCopy.readyTarget}</Text>
+          <Text style={styles.metaValue}>{readyTarget}</Text>
         </View>
       </View>
 
       <View style={styles.addressPanel}>
-        <Text style={styles.metaLabel}>Address summary</Text>
-        <Text style={styles.addressValue}>
-          {order.delivery.address ?? 'Address will be confirmed in chat.'}
+        <Text style={styles.metaLabel}>{uiCopy.addressSummary}</Text>
+        <Text style={styles.addressValue}>{order.delivery.address ?? addressFallback}</Text>
+      </View>
+
+      <View style={styles.notePanel}>
+        <Text style={styles.metaLabel}>{noteLabel}</Text>
+        <Text style={styles.note}>
+          {formatOrderNote(order.status, order.productionNote, order.delivery.note)}
         </Text>
       </View>
 
-      <Text style={styles.note}>{resolveOrderNote(order)}</Text>
-
       <View style={styles.orderActions}>
         {secondaryActionLabel && onSecondaryActionPress ? (
-          <Button label={secondaryActionLabel} onPress={onSecondaryActionPress} size="sm" variant="secondary" />
+          <Button
+            disabled={isSecondaryDisabled}
+            label={secondaryActionLabel}
+            onPress={onSecondaryActionPress}
+            size="sm"
+            variant="secondary"
+          />
         ) : null}
         <Button label={actionLabel} onPress={onActionPress} size="sm" />
       </View>
@@ -185,16 +158,37 @@ function OrderSurfaceCard({
 export default function CustomerOrdersScreen() {
   const router = useRouter();
   const currentUserId = useSessionStore((state) => state.currentUserId);
+  const currentUserName = useSessionStore((state) => state.currentUserName);
+  const { copy, formatDateLabel, formatDeliveryMethodLabel, formatOrderNote, formatOrderStatusLabel, formatRelativeLabel, language, navItems } =
+    useCustomerI18n();
   const { activeOrders, isLoading, orderHistory } = useCustomerOrders(currentUserId);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   const { width } = useWindowDimensions();
   const layout = useMemo(() => getLayout(width), [width]);
-
-  const leadOrder = activeOrders[0];
   const deliveredValue = orderHistory.reduce((sum, order) => sum + order.productPrice, 0);
+  const hasOrders = activeOrders.length > 0 || orderHistory.length > 0;
+
+  const handleCancelOrder = async (orderId: string) => {
+    if (!currentUserId || cancellingOrderId === orderId) {
+      return;
+    }
+
+    setCancellingOrderId(orderId);
+
+    try {
+      await updateOrderStatus(orderId, 'cancelled', {
+        senderId: currentUserId,
+        senderName: currentUserName ?? (language === 'ru' ? 'Клиент' : 'Customer'),
+        senderRole: 'customer',
+      });
+    } finally {
+      setCancellingOrderId((current) => (current === orderId ? null : current));
+    }
+  };
 
   return (
     <Screen
-      footer={<RoleBottomNav activeKey="orders" items={customerBottomNav} variant="floating" />}
+      footer={<RoleBottomNav activeKey="orders" items={navItems} variant="floating" />}
       footerMaxWidth={540}
       footerMode="floating"
       maxContentWidth={layout.maxContentWidth}
@@ -202,113 +196,40 @@ export default function CustomerOrdersScreen() {
     >
       <View style={[styles.header, layout.isDesktop ? styles.headerWide : null]}>
         <View style={styles.headerCopy}>
-          <Text style={styles.eyebrow}>AVISHU / ORDERS</Text>
-          <Text style={styles.title}>Orders</Text>
-          <Text style={styles.subtitle}>
-            Track active pieces, delivery summaries, and your completed archive from one calm screen.
-          </Text>
+          <Text style={styles.eyebrow}>{language === 'ru' ? 'AVISHU / ЗАКАЗЫ' : 'AVISHU / ORDERS'}</Text>
+          <Text style={styles.title}>{copy.orders.ordersTitle}</Text>
+          <Text style={styles.subtitle}>{copy.orders.subtitle}</Text>
         </View>
 
         <View style={styles.summaryRow}>
           <Card padding="lg" style={styles.summaryCard} variant="muted">
             <Text style={styles.summaryValue}>{activeOrders.length}</Text>
-            <Text style={styles.summaryLabel}>Active orders</Text>
+            <Text style={styles.summaryLabel}>{copy.orders.activeLabel}</Text>
           </Card>
           <Card padding="lg" style={styles.summaryCard} variant="muted">
             <Text style={styles.summaryValue}>{orderHistory.length}</Text>
-            <Text style={styles.summaryLabel}>Delivered pieces</Text>
+            <Text style={styles.summaryLabel}>{language === 'ru' ? 'В архиве' : 'Archived orders'}</Text>
           </Card>
           <Card padding="lg" style={styles.summaryCard} variant="muted">
             <Text style={styles.summaryValue}>{formatCurrency(deliveredValue)}</Text>
-            <Text style={styles.summaryLabel}>Archive value</Text>
+            <Text style={styles.summaryLabel}>{copy.orders.archiveLabel}</Text>
           </Card>
         </View>
       </View>
 
       {isLoading ? (
-        <LoadingState label="Loading orders" />
+        <LoadingState label={copy.orders.loading} />
+      ) : !hasOrders ? (
+        <EmptyState description={copy.orders.emptyDescription} title={copy.orders.emptyTitle} />
       ) : (
         <>
-          {leadOrder ? (
-            <View style={[styles.spotlightRow, layout.isDesktop ? styles.spotlightRowWide : null]}>
-              <Card padding="lg" style={styles.spotlightCard}>
-                {leadOrder.productImageUrl ? (
-                  <View style={styles.spotlightImageWrap}>
-                    <Image
-                      resizeMode="cover"
-                      source={{ uri: leadOrder.productImageUrl }}
-                      style={styles.spotlightImage}
-                    />
-                  </View>
-                ) : null}
-
-                <Text style={styles.sectionEyebrow}>Current order</Text>
-                <Text style={styles.spotlightTitle}>{leadOrder.productName}</Text>
-                <Text style={styles.spotlightBody}>
-                  {`${formatCurrency(leadOrder.productPrice)} / ${formatDeliveryMethod(leadOrder.delivery.method)} / updated ${formatRelativeTime(leadOrder.updatedAt)}`}
-                </Text>
-
-                <CustomerOrderTracker status={leadOrder.status} />
-
-                <View style={styles.spotlightDetailRow}>
-                  <View style={styles.spotlightMetaBlock}>
-                    <Text style={styles.metaLabel}>Delivery method</Text>
-                    <Text style={styles.metaValue}>{formatDeliveryMethod(leadOrder.delivery.method)}</Text>
-                  </View>
-                  <View style={styles.spotlightMetaBlock}>
-                    <Text style={styles.metaLabel}>Address</Text>
-                    <Text style={styles.metaValue}>
-                      {leadOrder.delivery.address ?? 'Address shared in support thread'}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.spotlightActions}>
-                  <Button label="Open support" onPress={() => router.push(`/customer/chat/${leadOrder.id}`)} size="sm" />
-                  <Button
-                    label="View all"
-                    onPress={() => router.push('/customer/orders')}
-                    size="sm"
-                    variant="secondary"
-                  />
-                </View>
-              </Card>
-
-              <Card padding="lg" style={styles.sidePanel} variant="muted">
-                <Text style={styles.sectionEyebrow}>Delivery note</Text>
-                <Text style={styles.sidePanelTitle}>{formatOrderStatus(leadOrder.status)}</Text>
-                <Text style={styles.sidePanelBody}>{resolveOrderNote(leadOrder)}</Text>
-
-                <View style={styles.sidePanelList}>
-                  <View style={styles.sidePanelRow}>
-                    <AssetIcon color={theme.colors.text.primary} name="packed" size={16} />
-                    <Text style={styles.sidePanelMeta}>Order {leadOrder.id}</Text>
-                  </View>
-                  <View style={styles.sidePanelRow}>
-                    <AssetIcon color={theme.colors.text.primary} name="alarm" size={16} />
-                    <Text style={styles.sidePanelMeta}>Updated {formatRelativeTime(leadOrder.updatedAt)}</Text>
-                  </View>
-                  <View style={styles.sidePanelRow}>
-                    <AssetIcon color={theme.colors.text.primary} name="message" size={16} />
-                    <Text style={styles.sidePanelMeta}>Support thread stays tied to this order only</Text>
-                  </View>
-                </View>
-              </Card>
-            </View>
-          ) : (
-            <EmptyState
-              description="Your future purchases and preorders will appear here with delivery tracking as soon as you place them."
-              title="No orders yet"
-            />
-          )}
-
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View>
-                <Text style={styles.sectionEyebrow}>Active</Text>
-                <Text style={styles.sectionTitle}>Live orders</Text>
+                <Text style={styles.sectionEyebrow}>{copy.orders.activeEyebrow}</Text>
+                <Text style={styles.sectionTitle}>{copy.orders.liveTitle}</Text>
               </View>
-              <Text style={styles.sectionMeta}>{activeOrders.length} open</Text>
+              <Text style={styles.sectionMeta}>{`${activeOrders.length} ${copy.orders.openMeta}`}</Text>
             </View>
 
             {activeOrders.length ? (
@@ -316,51 +237,83 @@ export default function CustomerOrdersScreen() {
                 {activeOrders.map((order) => (
                   <View key={order.id} style={{ width: layout.cardWidth }}>
                     <OrderSurfaceCard
-                      actionLabel="Open support"
+                      actionLabel={copy.orders.actionOpenSupport}
+                      addressFallback={copy.orders.addressFallback}
+                      formatDateLabel={formatDateLabel}
+                      formatDeliveryMethodLabel={formatDeliveryMethodLabel}
+                      formatOrderNote={formatOrderNote}
+                      formatOrderStatusLabel={formatOrderStatusLabel}
+                      formatRelativeLabel={formatRelativeLabel}
+                      isSecondaryDisabled={cancellingOrderId === order.id}
+                      noteLabel={language === 'ru' ? 'Статус' : 'Status'}
                       onActionPress={() => router.push(`/customer/chat/${order.id}`)}
+                      onSecondaryActionPress={() => void handleCancelOrder(order.id)}
                       order={order}
+                      secondaryActionLabel={
+                        cancellingOrderId === order.id ? copy.orders.actionCancelling : copy.orders.actionCancel
+                      }
+                      statusLanguage={language}
+                      uiCopy={{
+                        addressSummary: copy.orders.addressSummary,
+                        delivery: copy.orders.delivery,
+                        readyFallback: copy.orders.readyConfirmed,
+                        readyTarget: copy.orders.readyTarget,
+                        updated: copy.orders.updated,
+                      }}
                     />
                   </View>
                 ))}
               </View>
             ) : (
               <EmptyState
-                description="Placed and in-progress orders will surface here the moment they enter the customer flow."
-                title="No active orders"
+                description={language === 'ru'
+                  ? 'Как только заказ перейдет в активный поток, он появится здесь.'
+                  : 'Placed and in-progress orders will surface here the moment they enter the customer flow.'}
+                title={language === 'ru' ? 'Активных заказов нет' : 'No active orders'}
               />
             )}
           </View>
 
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionEyebrow}>History</Text>
-                <Text style={styles.sectionTitle}>Order archive</Text>
+          {orderHistory.length ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View>
+                  <Text style={styles.sectionEyebrow}>{copy.orders.archiveEyebrow}</Text>
+                  <Text style={styles.sectionTitle}>{copy.orders.historyTitle}</Text>
+                </View>
+                <Text style={styles.sectionMeta}>{`${orderHistory.length} ${copy.orders.archivedMeta}`}</Text>
               </View>
-              <Text style={styles.sectionMeta}>{orderHistory.length} archived</Text>
-            </View>
 
-            {orderHistory.length ? (
               <View style={[styles.cardGrid, { gap: layout.sectionGap }]}>
                 {orderHistory.map((order) => (
                   <View key={order.id} style={{ width: layout.cardWidth }}>
                     <OrderSurfaceCard
-                      actionLabel="View thread"
+                      actionLabel={copy.orders.actionViewThread}
+                      addressFallback={copy.orders.addressFallback}
+                      formatDateLabel={formatDateLabel}
+                      formatDeliveryMethodLabel={formatDeliveryMethodLabel}
+                      formatOrderNote={formatOrderNote}
+                      formatOrderStatusLabel={formatOrderStatusLabel}
+                      formatRelativeLabel={formatRelativeLabel}
+                      noteLabel={language === 'ru' ? 'Итог' : 'Final note'}
                       onActionPress={() => router.push(`/customer/chat/${order.id}`)}
-                      order={order}
-                      secondaryActionLabel="Revisit"
                       onSecondaryActionPress={() => router.push(`/customer/product/${order.productId}`)}
+                      order={order}
+                      secondaryActionLabel={copy.orders.actionRevisit}
+                      statusLanguage={language}
+                      uiCopy={{
+                        addressSummary: copy.orders.addressSummary,
+                        delivery: copy.orders.delivery,
+                        readyFallback: copy.orders.readyConfirmed,
+                        readyTarget: copy.orders.readyTarget,
+                        updated: copy.orders.updated,
+                      }}
                     />
                   </View>
                 ))}
               </View>
-            ) : (
-              <EmptyState
-                description="Delivered or cancelled orders will be archived here with their final notes and support history."
-                title="No archive yet"
-              />
-            )}
-          </View>
+            </View>
+          ) : null}
         </>
       )}
     </Screen>
@@ -407,15 +360,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: theme.spacing.md,
   },
-  orderImage: {
-    height: '100%',
-    width: '100%',
-  },
-  orderImageWrap: {
-    backgroundColor: theme.colors.surface.muted,
-    height: 188,
-    overflow: 'hidden',
-  },
   metaLabel: {
     color: theme.colors.text.secondary,
     fontSize: theme.typography.size.xs,
@@ -441,6 +385,9 @@ const styles = StyleSheet.create({
     color: theme.colors.text.secondary,
     fontSize: theme.typography.size.sm,
     lineHeight: theme.typography.lineHeight.sm,
+  },
+  notePanel: {
+    gap: theme.spacing.xs,
   },
   orderActions: {
     flexDirection: 'row',
@@ -468,6 +415,15 @@ const styles = StyleSheet.create({
   orderHeaderCopy: {
     flex: 1,
     gap: theme.spacing.xs,
+  },
+  orderImage: {
+    height: '100%',
+    width: '100%',
+  },
+  orderImageWrap: {
+    backgroundColor: theme.colors.surface.muted,
+    height: 188,
+    overflow: 'hidden',
   },
   orderSubcopy: {
     color: theme.colors.text.secondary,
@@ -507,121 +463,6 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.family.display,
     fontSize: theme.typography.size.lg,
     lineHeight: theme.typography.lineHeight.lg,
-  },
-  sidePanel: {
-    borderRadius: 24,
-    gap: theme.spacing.lg,
-  },
-  sidePanelBody: {
-    color: theme.colors.text.secondary,
-    fontSize: theme.typography.size.sm,
-    lineHeight: theme.typography.lineHeight.sm,
-  },
-  sidePanelList: {
-    gap: theme.spacing.md,
-  },
-  sidePanelMeta: {
-    color: theme.colors.text.primary,
-    flex: 1,
-    fontSize: theme.typography.size.sm,
-    lineHeight: theme.typography.lineHeight.sm,
-  },
-  sidePanelRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  sidePanelTitle: {
-    color: theme.colors.text.primary,
-    fontFamily: theme.typography.family.display,
-    fontSize: theme.typography.size.lg,
-    lineHeight: theme.typography.lineHeight.lg,
-  },
-  spotlightActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  spotlightBody: {
-    color: theme.colors.text.secondary,
-    fontSize: theme.typography.size.sm,
-    lineHeight: theme.typography.lineHeight.sm,
-  },
-  spotlightCard: {
-    borderRadius: 24,
-    flex: 1.3,
-    gap: theme.spacing.lg,
-  },
-  spotlightDetailRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
-  },
-  spotlightImage: {
-    height: '100%',
-    width: '100%',
-  },
-  spotlightImageWrap: {
-    backgroundColor: theme.colors.surface.muted,
-    height: 260,
-    overflow: 'hidden',
-  },
-  spotlightMetaBlock: {
-    backgroundColor: theme.colors.surface.muted,
-    borderRadius: 18,
-    flex: 1,
-    gap: theme.spacing.xs,
-    minWidth: 180,
-    padding: theme.spacing.md,
-  },
-  spotlightRow: {
-    gap: theme.spacing.lg,
-  },
-  spotlightRowWide: {
-    alignItems: 'stretch',
-    flexDirection: 'row',
-  },
-  spotlightTitle: {
-    color: theme.colors.text.primary,
-    fontFamily: theme.typography.family.display,
-    fontSize: theme.typography.size.xl,
-    lineHeight: theme.typography.lineHeight.xl,
-  },
-  stageDot: {
-    backgroundColor: theme.colors.border.subtle,
-    borderRadius: 4,
-    height: 8,
-    width: 8,
-  },
-  stageDotActive: {
-    backgroundColor: theme.colors.surface.inverse,
-  },
-  stageItem: {
-    alignItems: 'center',
-    flex: 1,
-    gap: theme.spacing.xs,
-    minWidth: 64,
-  },
-  stageLabel: {
-    color: theme.colors.text.secondary,
-    fontSize: 10,
-    letterSpacing: theme.typography.tracking.wide,
-    textAlign: 'center',
-    textTransform: 'uppercase',
-  },
-  stageLabelActive: {
-    color: theme.colors.text.primary,
-    fontWeight: theme.typography.weight.medium,
-  },
-  stageStrip: {
-    alignItems: 'flex-start',
-    borderColor: theme.colors.border.subtle,
-    borderRadius: 18,
-    borderWidth: theme.borders.width.thin,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    padding: theme.spacing.md,
   },
   subtitle: {
     color: theme.colors.text.secondary,

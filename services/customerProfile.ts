@@ -1,39 +1,28 @@
-import {
-  Timestamp,
-  doc,
-  onSnapshot,
-  runTransaction,
-  serverTimestamp,
-  setDoc,
-} from 'firebase/firestore';
+import { Timestamp, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 
 import { getFirestoreInstance } from '@/lib/firebase';
-import type {
-  CustomerAddress,
-  CustomerProfile,
-  CustomerProfileSeed,
-  LoyaltySummary,
-  LoyaltyTier,
-} from '@/types/customerProfile';
+import { buildLoyaltySummary } from '@/lib/utils/loyalty';
+import type { CustomerAddress, CustomerProfile, CustomerProfileSeed, LoyaltySummary } from '@/types/customerProfile';
 
 const USERS_COLLECTION = 'users';
 
-const loyaltyTiers: Array<{ minimumPoints: number; tier: LoyaltyTier }> = [
-  { minimumPoints: 0, tier: 'Slate' },
-  { minimumPoints: 800, tier: 'Monolith' },
-  { minimumPoints: 1800, tier: 'Obsidian' },
-];
-
 type FirestoreCustomerProfileRecord = {
   addresses?: CustomerAddress[] | null;
+  assignedFranchiseId?: string | null;
+  assignedFranchiseName?: string | null;
   createdAt?: Timestamp | string | null;
   displayName?: string | null;
   id?: string | null;
   loyalty?: {
-    currentTier?: LoyaltyTier | null;
-    nextTierProgress?: number | null;
+    benefits?: LoyaltySummary['benefits'] | null;
+    lifetimeSpent?: number | null;
+    nextTier?: LoyaltySummary['nextTier'] | null;
+    nextTierThreshold?: number | null;
     points?: number | null;
     pointsToNextTier?: number | null;
+    progressPercent?: number | null;
+    tier?: LoyaltySummary['tier'] | null;
+    totalOrders?: number | null;
   } | null;
   name?: string | null;
   phone?: string | null;
@@ -67,37 +56,16 @@ function normalizeAddress(address: CustomerAddress, index: number): CustomerAddr
   };
 }
 
-export function buildLoyaltySummary(points: number): LoyaltySummary {
-  const normalizedPoints = Math.max(0, Math.round(points));
-  const currentTier =
-    [...loyaltyTiers].reverse().find((tier) => normalizedPoints >= tier.minimumPoints) ?? loyaltyTiers[0];
-  const nextTier = loyaltyTiers.find((tier) => tier.minimumPoints > normalizedPoints) ?? null;
-  const pointsToNextTier = nextTier ? Math.max(nextTier.minimumPoints - normalizedPoints, 0) : 0;
-  const nextTierProgress = nextTier
-    ? Math.min(
-        1,
-        (normalizedPoints - currentTier.minimumPoints) /
-          Math.max(nextTier.minimumPoints - currentTier.minimumPoints, 1),
-      )
-    : 1;
-
-  return {
-    currentTier: currentTier.tier,
-    nextTier: nextTier?.tier ?? null,
-    nextTierProgress,
-    points: normalizedPoints,
-    pointsToNextTier,
-  };
-}
-
 function createOptimisticProfile(seed: CustomerProfileSeed): CustomerProfile {
   const now = new Date().toISOString();
 
   return {
     addresses: [],
+    assignedFranchiseId: seed.franchiseId ?? null,
+    assignedFranchiseName: seed.franchiseName ?? null,
     createdAt: now,
     displayName: seed.displayName?.trim().length ? seed.displayName.trim() : 'AVISHU Client',
-    loyalty: buildLoyaltySummary(0),
+    loyalty: buildLoyaltySummary(),
     phone: seed.phone ?? null,
     role: seed.role ?? 'customer',
     uid: seed.uid,
@@ -112,11 +80,15 @@ function normalizeProfile(
 ): CustomerProfile {
   const optimisticProfile = createOptimisticProfile(seed);
   const points = record?.loyalty?.points ?? 0;
+  const lifetimeSpent = record?.loyalty?.lifetimeSpent ?? 0;
+  const totalOrders = record?.loyalty?.totalOrders ?? 0;
 
   return {
     addresses: Array.isArray(record?.addresses)
       ? record.addresses.map((address, index) => normalizeAddress(address, index))
       : optimisticProfile.addresses,
+    assignedFranchiseId: record?.assignedFranchiseId ?? optimisticProfile.assignedFranchiseId,
+    assignedFranchiseName: record?.assignedFranchiseName ?? optimisticProfile.assignedFranchiseName,
     createdAt: toIsoString(record?.createdAt ?? optimisticProfile.createdAt),
     displayName:
       record?.displayName?.trim().length
@@ -124,7 +96,11 @@ function normalizeProfile(
         : record?.name?.trim().length
           ? record.name.trim()
           : optimisticProfile.displayName,
-    loyalty: buildLoyaltySummary(typeof points === 'number' ? points : 0),
+    loyalty: buildLoyaltySummary({
+      lifetimeSpent: typeof lifetimeSpent === 'number' ? lifetimeSpent : 0,
+      points: typeof points === 'number' ? points : 0,
+      totalOrders: typeof totalOrders === 'number' ? totalOrders : 0,
+    }),
     phone: record?.phone ?? record?.phoneNumber ?? optimisticProfile.phone,
     role: record?.role ?? optimisticProfile.role,
     uid: record?.uid ?? record?.id ?? fallbackId,
@@ -134,8 +110,10 @@ function normalizeProfile(
 
 function buildProfileMerge(seed: CustomerProfileSeed) {
   return {
+    assignedFranchiseId: seed.franchiseId ?? null,
+    assignedFranchiseName: seed.franchiseName ?? null,
     displayName: seed.displayName?.trim().length ? seed.displayName.trim() : 'AVISHU Client',
-    loyalty: buildLoyaltySummary(0),
+    loyalty: buildLoyaltySummary(),
     phone: seed.phone ?? null,
     role: seed.role ?? 'customer',
     uid: seed.uid,
@@ -175,25 +153,49 @@ export function subscribeToCustomerProfile(
         return;
       }
 
-      const profile = normalizeProfile(snapshot.data() as FirestoreCustomerProfileRecord, snapshot.id, seed);
+      const snapshotData = snapshot.data() as FirestoreCustomerProfileRecord;
+      const profile = normalizeProfile(snapshotData, snapshot.id, seed);
       onProfile(profile);
 
       const mergePatch: Partial<FirestoreCustomerProfileRecord> = {};
+      const snapshotLoyalty = snapshotData.loyalty;
 
-      if (!snapshot.data().uid) {
+      if (!snapshotData.uid) {
         mergePatch.uid = seed.uid;
       }
 
-      if (!snapshot.data().displayName && seed.displayName?.trim().length) {
+      if (!snapshotData.displayName && seed.displayName?.trim().length) {
         mergePatch.displayName = seed.displayName.trim();
       }
 
-      if (!snapshot.data().role && seed.role) {
+      if (snapshotData.assignedFranchiseId == null && seed.franchiseId) {
+        mergePatch.assignedFranchiseId = seed.franchiseId;
+      }
+
+      if (snapshotData.assignedFranchiseName == null && seed.franchiseName) {
+        mergePatch.assignedFranchiseName = seed.franchiseName;
+      }
+
+      if (!snapshotData.role && seed.role) {
         mergePatch.role = seed.role;
       }
 
-      if (snapshot.data().phone == null && seed.phone) {
+      if (snapshotData.phone == null && seed.phone) {
         mergePatch.phone = seed.phone;
+      }
+
+      if (
+        !snapshotLoyalty ||
+        snapshotLoyalty.points !== profile.loyalty.points ||
+        snapshotLoyalty.tier !== profile.loyalty.tier ||
+        snapshotLoyalty.nextTier !== profile.loyalty.nextTier ||
+        snapshotLoyalty.nextTierThreshold !== profile.loyalty.nextTierThreshold ||
+        snapshotLoyalty.pointsToNextTier !== profile.loyalty.pointsToNextTier ||
+        snapshotLoyalty.progressPercent !== profile.loyalty.progressPercent ||
+        snapshotLoyalty.lifetimeSpent !== profile.loyalty.lifetimeSpent ||
+        snapshotLoyalty.totalOrders !== profile.loyalty.totalOrders
+      ) {
+        mergePatch.loyalty = profile.loyalty;
       }
 
       if (Object.keys(mergePatch).length > 0) {
@@ -215,7 +217,9 @@ export function subscribeToCustomerProfile(
 
 export async function updateCustomerProfile(
   uid: string,
-  patch: Partial<Pick<CustomerProfile, 'addresses' | 'displayName' | 'phone' | 'role'>>,
+  patch: Partial<
+    Pick<CustomerProfile, 'addresses' | 'assignedFranchiseId' | 'assignedFranchiseName' | 'displayName' | 'phone' | 'role'>
+  >,
 ) {
   const firestore = getFirestoreInstance();
 
@@ -227,6 +231,8 @@ export async function updateCustomerProfile(
     doc(firestore, USERS_COLLECTION, uid),
     {
       ...(patch.addresses ? { addresses: patch.addresses.map(normalizeAddress) } : {}),
+      ...(patch.assignedFranchiseId !== undefined ? { assignedFranchiseId: patch.assignedFranchiseId } : {}),
+      ...(patch.assignedFranchiseName !== undefined ? { assignedFranchiseName: patch.assignedFranchiseName } : {}),
       ...(patch.displayName !== undefined ? { displayName: patch.displayName.trim() || 'AVISHU Client' } : {}),
       ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
       ...(patch.role ? { role: patch.role } : {}),
@@ -235,49 +241,4 @@ export async function updateCustomerProfile(
     },
     { merge: true },
   );
-}
-
-export async function applyCustomerLoyaltyReward(
-  seed: CustomerProfileSeed,
-  rewardPoints: number,
-) {
-  const firestore = getFirestoreInstance();
-  const awardedPoints = Math.max(0, Math.round(rewardPoints));
-
-  if (!firestore || awardedPoints <= 0) {
-    return buildLoyaltySummary(0);
-  }
-
-  const profileRef = doc(firestore, USERS_COLLECTION, seed.uid);
-
-  const nextLoyalty = await runTransaction(firestore, async (transaction) => {
-    const snapshot = await transaction.get(profileRef);
-    const currentProfile = snapshot.exists()
-      ? normalizeProfile(snapshot.data() as FirestoreCustomerProfileRecord, snapshot.id, seed)
-      : createOptimisticProfile(seed);
-    const updatedLoyalty = buildLoyaltySummary(currentProfile.loyalty.points + awardedPoints);
-
-    transaction.set(
-      profileRef,
-      {
-        ...(snapshot.exists()
-          ? {}
-          : {
-              addresses: currentProfile.addresses,
-              createdAt: serverTimestamp(),
-            }),
-        displayName: currentProfile.displayName,
-        loyalty: updatedLoyalty,
-        phone: currentProfile.phone,
-        role: currentProfile.role,
-        uid: seed.uid,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true },
-    );
-
-    return updatedLoyalty;
-  });
-
-  return nextLoyalty;
 }

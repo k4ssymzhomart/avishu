@@ -24,6 +24,8 @@ export function useFranchiseeWorkspace() {
       branchAddress: demoProfile.branchAddress ?? null,
       branchId: demoProfile.branchId ?? currentUserId,
       branchName: currentUserName ?? demoProfile.branchName ?? demoProfile.name,
+      franchiseId: demoProfile.franchiseId ?? demoProfile.id,
+      franchiseName: demoProfile.franchiseName ?? demoProfile.branchName ?? demoProfile.name,
       id: currentUserId,
       linkedFranchiseIds: demoProfile.linkedFranchiseIds ?? [demoProfile.id],
       name: currentUserName ?? demoProfile.name,
@@ -62,6 +64,8 @@ export function useFranchiseeWorkspace() {
       branchAddress: fallbackProfile.branchAddress ?? null,
       branchId: fallbackProfile.branchId ?? currentUserId,
       branchName: fallbackProfile.branchName ?? fallbackProfile.name,
+      franchiseId: fallbackProfile.franchiseId ?? fallbackProfile.linkedFranchiseIds?.[0] ?? currentUserId,
+      franchiseName: fallbackProfile.franchiseName ?? fallbackProfile.branchName ?? fallbackProfile.name,
       id: currentUserId,
       linkedFranchiseIds: fallbackProfile.linkedFranchiseIds ?? demoUsersByRole.franchisee.linkedFranchiseIds ?? [demoUsersByRole.franchisee.id],
       name: fallbackProfile.name,
@@ -83,7 +87,9 @@ export function useFranchiseeWorkspace() {
     branchId: profile?.branchId ?? fallbackProfile?.branchId ?? currentUserId,
     branchName: profile?.branchName ?? fallbackProfile?.branchName ?? currentUserName ?? 'AVISHU Boutique',
     franchiseId:
+      profile?.franchiseId ??
       profile?.linkedFranchiseIds?.[0] ??
+      fallbackProfile?.franchiseId ??
       fallbackProfile?.linkedFranchiseIds?.[0] ??
       demoUsersByRole.franchisee.linkedFranchiseIds?.[0] ??
       demoUsersByRole.franchisee.id,

@@ -1,19 +1,9 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { DEFAULT_ORDER_NOTIFICATION_CHANNEL, removePushTokenRecord, upsertPushTokenRecord } from '@/services/notifications';
 import type { UserRole } from '@/types/user';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
 
 type RegisterForPushNotificationsInput = {
   role: UserRole;
@@ -30,6 +20,45 @@ type RegisterForPushNotificationsResult =
       status: 'denied' | 'unavailable';
     };
 
+type DevicePushTokenLike = {
+  data: unknown;
+};
+
+let notificationsModulePromise: Promise<typeof import('expo-notifications') | null> | null = null;
+let notificationHandlerReady = false;
+
+export function canUseNativeNotifications() {
+  return Platform.OS !== 'web' && Constants.appOwnership !== 'expo';
+}
+
+async function getNotificationsModule() {
+  if (!canUseNativeNotifications()) {
+    return null;
+  }
+
+  if (!notificationsModulePromise) {
+    notificationsModulePromise = import('expo-notifications')
+      .then((module) => {
+        if (!notificationHandlerReady) {
+          module.setNotificationHandler({
+            handleNotification: async () => ({
+              shouldPlaySound: true,
+              shouldSetBadge: false,
+              shouldShowBanner: true,
+              shouldShowList: true,
+            }),
+          });
+          notificationHandlerReady = true;
+        }
+
+        return module;
+      })
+      .catch(() => null);
+  }
+
+  return notificationsModulePromise;
+}
+
 function getExpoProjectId() {
   return (
     process.env.EXPO_PUBLIC_EXPO_PROJECT_ID ??
@@ -39,7 +68,7 @@ function getExpoProjectId() {
   );
 }
 
-function serializeDevicePushToken(devicePushToken: Notifications.DevicePushToken | null) {
+function serializeDevicePushToken(devicePushToken: DevicePushTokenLike | null) {
   if (!devicePushToken) {
     return null;
   }
@@ -51,7 +80,7 @@ function serializeDevicePushToken(devicePushToken: Notifications.DevicePushToken
   return JSON.stringify(devicePushToken.data);
 }
 
-async function ensureNotificationChannel() {
+async function ensureNotificationChannel(Notifications: typeof import('expo-notifications')) {
   if (Platform.OS !== 'android') {
     return;
   }
@@ -67,14 +96,30 @@ async function ensureNotificationChannel() {
 export async function registerDeviceForOrderNotifications(
   input: RegisterForPushNotificationsInput,
 ): Promise<RegisterForPushNotificationsResult> {
-  if (Platform.OS === 'web' || !Device.isDevice) {
+  if (!canUseNativeNotifications()) {
+    return {
+      reason: 'Push notifications require a development build or native install.',
+      status: 'unavailable',
+    };
+  }
+
+  if (!Device.isDevice) {
     return {
       reason: 'Push notifications are available on physical iOS and Android devices only.',
       status: 'unavailable',
     };
   }
 
-  await ensureNotificationChannel();
+  const Notifications = await getNotificationsModule();
+
+  if (!Notifications) {
+    return {
+      reason: 'expo-notifications is unavailable in the current runtime.',
+      status: 'unavailable',
+    };
+  }
+
+  await ensureNotificationChannel(Notifications);
 
   const existingPermissions = await Notifications.getPermissionsAsync();
   let finalStatus = existingPermissions.status;
@@ -123,3 +168,5 @@ export async function registerDeviceForOrderNotifications(
 export function unregisterDeviceFromOrderNotifications(userId: string, expoPushToken: string) {
   return removePushTokenRecord(userId, expoPushToken);
 }
+
+export { getNotificationsModule };

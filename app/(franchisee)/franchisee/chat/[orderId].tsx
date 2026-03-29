@@ -24,7 +24,7 @@ export default function FranchiseeChatThreadScreen() {
   const inputRef = useRef<TextInput>(null);
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const workspace = useFranchiseeWorkspace();
-  const { copy, formatRelativeLabel, getProcessSteps, getStatusLabel } = useFranchiseeI18n();
+  const { copy, formatRelativeLabel, getProcessSteps, getStatusLabel, language } = useFranchiseeI18n();
   const scope = useMemo(
     () =>
       workspace.userId
@@ -116,7 +116,6 @@ export default function FranchiseeChatThreadScreen() {
       footer={
         <View style={styles.composerShell}>
           <View style={styles.composerField}>
-            <Text style={styles.composerLabel}>{copy.chat.composerLabel}</Text>
             <View style={styles.composerRow}>
               <TextInput
                 multiline
@@ -138,9 +137,7 @@ export default function FranchiseeChatThreadScreen() {
                   isSending || !draft.trim().length ? styles.sendButtonDisabled : null,
                 ]}
               >
-                <View style={styles.sendIconWrap}>
-                  <AssetIcon color={theme.colors.text.inverse} name="backArrow" size={14} />
-                </View>
+                <AssetIcon color={theme.colors.text.inverse} name="send" size={16} />
               </Pressable>
             </View>
           </View>
@@ -190,7 +187,7 @@ export default function FranchiseeChatThreadScreen() {
       ) : displayMessages.length ? (
         <View style={styles.messageList}>
           {displayMessages.map((message) => (
-            <ChatMessageBubble key={message.id} message={message} />
+            <ChatMessageBubble key={message.id} language={language} message={message} viewerRole="franchisee" />
           ))}
         </View>
       ) : (
@@ -206,9 +203,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border.subtle,
     borderRadius: 24,
     borderWidth: theme.borders.width.thin,
-    gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
   },
   composerInput: {
     color: theme.colors.text.primary,
@@ -218,13 +214,6 @@ const styles = StyleSheet.create({
     minHeight: 40,
     paddingVertical: theme.spacing.xs,
     textAlignVertical: 'top',
-  },
-  composerLabel: {
-    color: theme.colors.text.secondary,
-    fontSize: theme.typography.size.xs,
-    fontWeight: theme.typography.weight.medium,
-    letterSpacing: theme.typography.tracking.widest,
-    textTransform: 'uppercase',
   },
   composerRow: {
     alignItems: 'flex-end',
@@ -291,9 +280,6 @@ const styles = StyleSheet.create({
   },
   sendButtonPressed: {
     opacity: 0.82,
-  },
-  sendIconWrap: {
-    transform: [{ rotate: '180deg' }],
   },
   summaryBody: {
     color: theme.colors.text.inverseMuted,

@@ -5,9 +5,10 @@ import { AssetIcon } from '@/components/icons/AssetIcon';
 import { Screen } from '@/components/layout/Screen';
 import { FavoriteToggleButton } from '@/components/product/FavoriteToggleButton';
 import { Button } from '@/components/ui/Button';
+import { useCustomerI18n } from '@/hooks/useCustomerI18n';
 import { useProduct } from '@/hooks/useProduct';
 import { theme } from '@/lib/theme/tokens';
-import { formatAvailability, formatCurrency } from '@/lib/utils/format';
+import { formatCurrency } from '@/lib/utils/format';
 import { getProductCatalogMeta } from '@/lib/utils/productCatalog';
 import { useCartStore } from '@/store/cart';
 import { useFavoritesStore } from '@/store/favorites';
@@ -15,6 +16,7 @@ import { useFavoritesStore } from '@/store/favorites';
 export default function ProductDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { copy, formatAvailabilityLabel, language } = useCustomerI18n();
   const { isLoading, product } = useProduct(id ?? null);
   const { beginDirectCheckout, cartItems } = useCartStore();
   const favoriteProductIds = useFavoritesStore((state) => state.favoriteProductIds);
@@ -27,7 +29,7 @@ export default function ProductDetailScreen() {
   if (isLoading) {
     return (
       <Screen maxContentWidth={maxContentWidth} scroll>
-        <Text style={styles.loadingText}>Loading product</Text>
+        <Text style={styles.loadingText}>{language === 'ru' ? 'Загрузка модели' : 'Loading product'}</Text>
       </Screen>
     );
   }
@@ -36,29 +38,32 @@ export default function ProductDetailScreen() {
     return (
       <Screen maxContentWidth={maxContentWidth} scroll>
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>Not found</Text>
-          <Text style={styles.emptyBody}>This product is no longer available.</Text>
-          <Button label="Return home" onPress={() => router.replace('/customer')} size="sm" />
+          <Text style={styles.emptyTitle}>{copy.product.notFoundTitle}</Text>
+          <Text style={styles.emptyBody}>{copy.product.notFoundBody}</Text>
+          <Button label={copy.product.returnHome} onPress={() => router.replace('/customer')} size="sm" />
         </View>
       </Screen>
     );
   }
 
   const meta = getProductCatalogMeta(product);
+  const description = product.description ?? copy.product.defaultDescription;
+  const material = product.material ?? copy.product.defaultMaterial;
+  const fit = product.fit ?? copy.product.defaultFit;
 
   return (
     <Screen
       footer={
         <View style={styles.footerActions}>
           <Button
-            label={cartItems.length ? `View cart (${cartItems.length})` : 'View cart'}
+            label={cartItems.length ? `${copy.product.viewCart} (${cartItems.length})` : copy.product.viewCart}
             onPress={() => router.push('/customer/cart')}
             size="sm"
             style={styles.footerButton}
             variant="secondary"
           />
           <Button
-            label="Select size"
+            label={copy.product.selectSize}
             onPress={() => {
               beginDirectCheckout(product);
               router.push(`/customer/checkout/size?productId=${product.id}`);
@@ -74,12 +79,12 @@ export default function ProductDetailScreen() {
     >
       <View style={styles.topBar}>
         <Pressable onPress={() => router.back()} style={styles.topButton}>
-          <AssetIcon color={theme.colors.text.primary} name="backArrow" size={16} />
+          <AssetIcon color={theme.colors.text.primary} name="backArrow" size={18} />
         </Pressable>
-        <Text style={styles.pageTitle}>Details</Text>
+        <Text style={styles.pageTitle}>{copy.product.details}</Text>
         <View style={styles.topActions}>
           <Pressable onPress={() => router.push('/customer/cart')} style={styles.topButton}>
-            <AssetIcon color={theme.colors.text.primary} name="packed" size={16} />
+            <AssetIcon color={theme.colors.text.primary} name="bag" size={18} />
             {cartItems.length ? (
               <View style={styles.cartBadge}>
                 <Text style={styles.cartBadgeLabel}>{cartItems.length > 9 ? '9+' : cartItems.length}</Text>
@@ -111,7 +116,7 @@ export default function ProductDetailScreen() {
         <View style={[styles.detailPanel, isWide ? styles.detailPanelWide : null]}>
           <View style={styles.metaHeader}>
             <Text style={styles.collection}>{product.collection ?? 'AVISHU'}</Text>
-            <Text style={styles.availability}>{formatAvailability(product.availability)}</Text>
+            <Text style={styles.availability}>{formatAvailabilityLabel(product.availability)}</Text>
           </View>
 
           <View style={styles.titleRow}>
@@ -119,11 +124,11 @@ export default function ProductDetailScreen() {
             <Text style={styles.price}>{formatCurrency(product.price)}</Text>
           </View>
 
-          <Text style={styles.description}>{meta.description}</Text>
+          <Text style={styles.description}>{description}</Text>
 
           <View style={styles.selectorRow}>
             <View style={styles.selectorCard}>
-              <Text style={styles.selectorLabel}>Tone</Text>
+              <Text style={styles.selectorLabel}>{copy.product.tone}</Text>
               <View style={styles.swatchRow}>
                 {meta.colors.slice(0, 3).map((color) => (
                   <View key={color.id} style={[styles.swatch, { backgroundColor: color.swatch }]} />
@@ -133,31 +138,29 @@ export default function ProductDetailScreen() {
             </View>
 
             <View style={styles.selectorCard}>
-              <Text style={styles.selectorLabel}>Sizes</Text>
+              <Text style={styles.selectorLabel}>{language === 'ru' ? 'Размеры' : 'Sizes'}</Text>
               <Text style={styles.selectorValue}>{meta.sizes.join('  ')}</Text>
             </View>
           </View>
 
           <View style={styles.factGrid}>
             <View style={styles.factCard}>
-              <Text style={styles.factLabel}>About</Text>
-              <Text style={styles.factValue}>{product.category ?? 'Curated piece'}</Text>
+              <Text style={styles.factLabel}>{copy.product.about}</Text>
+              <Text style={styles.factValue}>{product.category ?? copy.home.curatedPiece}</Text>
             </View>
             <View style={styles.factCard}>
-              <Text style={styles.factLabel}>Material</Text>
-              <Text style={styles.factValue}>{meta.material}</Text>
+              <Text style={styles.factLabel}>{copy.product.material}</Text>
+              <Text style={styles.factValue}>{material}</Text>
             </View>
             <View style={styles.factCard}>
-              <Text style={styles.factLabel}>Fit</Text>
-              <Text style={styles.factValue}>{meta.fit}</Text>
+              <Text style={styles.factLabel}>{copy.product.fit}</Text>
+              <Text style={styles.factValue}>{fit}</Text>
             </View>
           </View>
 
           <View style={styles.noteStrip}>
-            <Text style={styles.noteLabel}>Purchase flow</Text>
-            <Text style={styles.noteText}>
-              Product details, size, delivery, payment, and confirmation are now separated into cleaner steps.
-            </Text>
+            <Text style={styles.noteLabel}>{copy.product.purchaseFlow}</Text>
+            <Text style={styles.noteText}>{copy.product.purchaseFlowBody}</Text>
           </View>
         </View>
       </View>
@@ -393,7 +396,9 @@ const styles = StyleSheet.create({
   },
   topButton: {
     alignItems: 'center',
+    backgroundColor: theme.colors.surface.default,
     borderColor: theme.colors.border.subtle,
+    borderRadius: 999,
     borderWidth: theme.borders.width.thin,
     height: 40,
     justifyContent: 'center',

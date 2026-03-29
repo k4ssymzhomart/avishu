@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { ProductionBoardEmptyState } from '@/components/production/ProductionBoardEmptyState';
 import { ProductionBoardSkeleton } from '@/components/production/ProductionBoardSkeleton';
+import { ProductionHeaderNotificationAction } from '@/components/production/ProductionHeaderNotificationAction';
 import { ProductionTaskCard } from '@/components/production/ProductionTaskCard';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Screen } from '@/components/layout/Screen';
@@ -27,6 +28,7 @@ export default function ProductionReadyScreen() {
       scroll
     >
       <AppHeader
+        actionSlot={<ProductionHeaderNotificationAction />}
         eyebrow="AVISHU / PRODUCTION"
         subtitle={
           productionUser

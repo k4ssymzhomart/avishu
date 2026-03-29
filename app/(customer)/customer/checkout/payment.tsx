@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -6,11 +6,15 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CheckoutHeader } from '@/components/customer/CheckoutHeader';
 import { Screen } from '@/components/layout/Screen';
 import { Button } from '@/components/ui/Button';
+import { useFranchises } from '@/hooks/useFranchises';
+import { useCustomerI18n } from '@/hooks/useCustomerI18n';
 import { useProducts } from '@/hooks/useProducts';
+import { useProductionUnits } from '@/hooks/useProductionUnits';
+import { demoUsersByRole } from '@/lib/constants/demo';
 import { theme } from '@/lib/theme/tokens';
-import { formatCurrency, formatDeliveryMethod } from '@/lib/utils/format';
+import { formatCurrency } from '@/lib/utils/format';
 import { buildOrderProductName } from '@/lib/utils/productCatalog';
-import { createOrders, getDefaultFranchiseId } from '@/services/orders';
+import { createOrders } from '@/services/orders';
 import { useCartStore } from '@/store/cart';
 import { useSessionStore } from '@/store/session';
 
@@ -30,12 +34,15 @@ type CheckoutEntry = {
 export default function CheckoutPaymentScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string; productId?: string }>();
+  const { copy, formatDeliveryMethodLabel, language } = useCustomerI18n();
   const { products } = useProducts();
   const currentUserId = useSessionStore((state) => state.currentUserId);
   const currentUserName = useSessionStore((state) => state.currentUserName);
   const currentUserPhoneNumber = useSessionStore((state) => state.currentUserPhoneNumber);
+  const currentUserProfile = useSessionStore((state) => state.currentUserProfile);
   const { cartItems, draft, setReceipt } = useCartStore();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { franchises } = useFranchises();
+  const { productionUnits } = useProductionUnits();
 
   const checkoutEntries = useMemo<CheckoutEntry[]>(() => {
     if (draft.mode === 'cart') {
@@ -74,17 +81,27 @@ export default function CheckoutPaymentScreen() {
   }, [cartItems, draft, params.productId, products]);
 
   const total = checkoutEntries.reduce((sum, item) => sum + item.price, 0);
-  const deliveryAddress = draft.deliveryMethod === 'boutique_pickup'
-    ? 'AVISHU boutique pickup point'
-    : draft.deliveryAddress.trim() || 'Delivery address will be confirmed in the support thread.';
+  const assignedFranchiseId =
+    currentUserProfile?.assignedFranchiseId ?? demoUsersByRole.customer.franchiseId ?? demoUsersByRole.franchisee.id;
+  const assignedFranchiseName =
+    currentUserProfile?.assignedFranchiseName ??
+    demoUsersByRole.customer.franchiseName ??
+    demoUsersByRole.franchisee.branchName ??
+    'AVISHU Boutique';
+  const assignedFranchise = franchises.find((franchise) => franchise.id === assignedFranchiseId) ?? null;
+  const assignedProductionUnit =
+    productionUnits.find((unit) => unit.linkedFranchises.includes(assignedFranchiseId)) ?? null;
+  const deliveryAddress =
+    draft.deliveryMethod === 'boutique_pickup'
+      ? assignedFranchise?.address ?? copy.checkout.pickupLocation
+      : draft.deliveryAddress.trim() || copy.chatThread.addressFallback;
   const canSubmit = checkoutEntries.length > 0 && !!currentUserId;
 
-  const handleKaspiPayment = async () => {
+  const handleKaspiPayment = () => {
     if (!canSubmit || !currentUserId) {
       return;
     }
 
-    setIsSubmitting(true);
     const orderInputs = checkoutEntries
       .map((entry) => {
         const product = products.find((item) => item.id === entry.productId);
@@ -95,18 +112,22 @@ export default function CheckoutPaymentScreen() {
 
         return {
           customerId: currentUserId,
-          customerName: currentUserName ?? 'AVISHU Client',
+          customerName: currentUserName ?? (language === 'ru' ? 'Клиент AVISHU' : 'AVISHU Client'),
           customerPhoneNumber: currentUserPhoneNumber ?? null,
           delivery: {
             address: deliveryAddress,
             mapPreviewLabel:
               draft.deliveryMethod === 'boutique_pickup'
-                ? 'Pickup location is confirmed in the order-linked support thread.'
-                : `Pinned: ${deliveryAddress}`,
+                ? assignedFranchise?.name ?? copy.checkout.pickupHint
+                : language === 'ru'
+                  ? `Закреплено: ${deliveryAddress}`
+                  : `Pinned: ${deliveryAddress}`,
             method: draft.deliveryMethod,
             note: draft.deliveryNote.trim() || null,
           },
-          franchiseId: getDefaultFranchiseId(),
+          branchId: assignedFranchiseId,
+          branchName: assignedFranchiseName,
+          franchiseId: assignedFranchiseId,
           paymentMethod: 'kaspi' as const,
           preferredReadyDate: entry.preferredReadyDate ?? null,
           productCollection: entry.productCollection ?? null,
@@ -117,6 +138,8 @@ export default function CheckoutPaymentScreen() {
             size: entry.size,
           }),
           productPrice: entry.price,
+          productionUnitId: assignedProductionUnit?.id ?? demoUsersByRole.production.productionUnitId ?? null,
+          productionUnitName: assignedProductionUnit?.name ?? demoUsersByRole.production.productionUnitName ?? null,
           selectedColorId:
             draft.mode === 'direct'
               ? draft.colorId ?? null
@@ -143,7 +166,7 @@ export default function CheckoutPaymentScreen() {
 
     router.replace('/customer/checkout/success');
 
-    // Demo payment flow: advance instantly, then let Firebase writes settle in the background.
+    // Keep payment as an instant next-step button while the shared order write runs in the background.
     void createOrders(orderInputs).catch(() => undefined);
   };
 
@@ -151,19 +174,21 @@ export default function CheckoutPaymentScreen() {
     <Screen maxContentWidth={720} scroll>
       <CheckoutHeader
         currentStep={4}
+        eyebrow={copy.checkout.purchaseFlow}
         onBackPress={() => router.back()}
-        subtitle="Confirm the order summary and complete the MVP payment simulation."
-        title="Payment"
+        stepLabel={copy.checkout.step}
+        subtitle={copy.checkout.paymentSubtitle}
+        title={copy.checkout.payment}
       />
 
       <View style={styles.summaryCard}>
-        <Text style={styles.summaryEyebrow}>Order summary</Text>
-        {checkoutEntries.map((entry) => (
-          <View key={`${entry.productId}-${entry.size}-${entry.colorLabel}`} style={styles.lineItem}>
+        <Text style={styles.summaryEyebrow}>{copy.checkout.orderSummary}</Text>
+        {checkoutEntries.map((entry, index) => (
+          <View key={`${entry.productId}-${entry.size}-${entry.colorLabel}-${index}`} style={styles.lineItem}>
             <View style={styles.lineCopy}>
               <Text style={styles.lineTitle}>{entry.productName}</Text>
               <Text style={styles.lineMeta}>
-                {[entry.colorLabel, entry.size, entry.type === 'preorder' ? 'Preorder' : 'Ready now']
+                {[entry.colorLabel, entry.size, entry.type === 'preorder' ? copy.checkout.preorderPiece : copy.checkout.availableNow]
                   .filter(Boolean)
                   .join(' / ')}
               </Text>
@@ -175,41 +200,39 @@ export default function CheckoutPaymentScreen() {
         <View style={styles.divider} />
 
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Delivery</Text>
-          <Text style={styles.summaryValue}>{formatDeliveryMethod(draft.deliveryMethod)}</Text>
+          <Text style={styles.summaryLabel}>{copy.checkout.delivery}</Text>
+          <Text style={styles.summaryValue}>{formatDeliveryMethodLabel(draft.deliveryMethod)}</Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Address</Text>
+          <Text style={styles.summaryLabel}>{copy.checkout.address}</Text>
           <Text style={styles.summaryValue}>{deliveryAddress}</Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Total</Text>
+          <Text style={styles.summaryLabel}>{copy.checkout.total}</Text>
           <Text style={styles.summaryTotal}>{formatCurrency(total)}</Text>
         </View>
       </View>
 
       <View style={styles.paymentPanel}>
-        <Text style={styles.paymentEyebrow}>Payment method</Text>
-        <Text style={styles.paymentTitle}>Kaspi Pay</Text>
-        <Text style={styles.paymentBody}>
-          The payment step is simulated for MVP. Use the Kaspi action below to confirm the order.
-        </Text>
+        <Text style={styles.paymentEyebrow}>{copy.checkout.paymentMethod}</Text>
+        <Text style={styles.paymentTitle}>{copy.checkout.paymentTitle}</Text>
+        <Text style={styles.paymentBody}>{copy.checkout.paymentBody}</Text>
 
         <Pressable
-          disabled={!canSubmit || isSubmitting}
-          onPress={() => void handleKaspiPayment()}
+          disabled={!canSubmit}
+          onPress={handleKaspiPayment}
           style={({ pressed }) => [
             styles.kaspiButton,
             pressed ? styles.kaspiButtonPressed : null,
-            !canSubmit || isSubmitting ? styles.kaspiButtonDisabled : null,
+            !canSubmit ? styles.kaspiButtonDisabled : null,
           ]}
         >
           <Image resizeMode="contain" source={kaspiLogo} style={styles.kaspiLogo} />
-          <Text style={styles.kaspiButtonLabel}>{isSubmitting ? 'Processing payment' : 'Pay with Kaspi'}</Text>
+          <Text style={styles.kaspiButtonLabel}>{copy.checkout.payWithKaspi}</Text>
         </Pressable>
 
         <Button
-          label="Back to delivery"
+          label={copy.checkout.backToDelivery}
           onPress={() => router.back()}
           size="sm"
           style={styles.secondaryAction}

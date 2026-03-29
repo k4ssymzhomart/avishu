@@ -12,7 +12,9 @@ export default function FranchiseeLayout() {
 
   return (
     <Stack screenOptions={{ headerShown: false, animation: 'none' }}>
+      <Stack.Screen name="franchisee/catalog" />
       <Stack.Screen name="franchisee/index" />
+      <Stack.Screen name="franchisee/network" />
       <Stack.Screen name="franchisee/orders" />
       <Stack.Screen name="franchisee/clients" />
       <Stack.Screen name="franchisee/chat/[orderId]" />

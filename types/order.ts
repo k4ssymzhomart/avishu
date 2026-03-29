@@ -29,6 +29,16 @@ export type DeliveryDetails = {
   note?: string | null;
 };
 
+export type OrderLoyaltyReward = {
+  awardedAt: string | null;
+  awardedPoints: number;
+  basePoints: number;
+  bonusPoints: number;
+  firstOrderBonusApplied: boolean;
+  preorderBonusApplied: boolean;
+  statusAtAward: OrderStatus;
+};
+
 export type Order = {
   branchId?: string | null;
   branchName?: string | null;
@@ -44,10 +54,13 @@ export type Order = {
   productCollection?: string | null;
   productId: string;
   productImageUrl?: string | null;
+  loyalty?: OrderLoyaltyReward | null;
   productName: string;
   productPrice: number;
+  productionUnitId: string | null;
   productionNote: string | null;
   productionNoteUpdatedAt: string | null;
+  productionUnitName?: string | null;
   selectedColorId?: string | null;
   selectedColorLabel?: string | null;
   selectedSize?: string | null;
@@ -82,4 +95,7 @@ export type CreateOrderInput = Pick<
   | 'selectedColorLabel'
   | 'selectedSize'
   | 'type'
->;
+> & {
+  productionUnitId?: string | null;
+  productionUnitName?: string | null;
+};

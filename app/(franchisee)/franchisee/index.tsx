@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { FranchiseeBranchMap } from '@/components/franchisee/FranchiseeBranchMap';
 import { FranchiseeFlowStrip } from '@/components/franchisee/FranchiseeFlowStrip';
@@ -9,13 +9,16 @@ import { FranchiseeLaneSection } from '@/components/franchisee/FranchiseeLaneSec
 import { FranchiseeMetricTile } from '@/components/franchisee/FranchiseeMetricTile';
 import { FranchiseeOrderCard } from '@/components/franchisee/FranchiseeOrderCard';
 import { FranchiseeDashboardSkeleton } from '@/components/franchisee/FranchiseeSkeletons';
+import { AssetIcon } from '@/components/icons/AssetIcon';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Screen } from '@/components/layout/Screen';
 import { RoleBottomNav } from '@/components/navigation/RoleBottomNav';
+import { Button } from '@/components/ui/Button';
 import { Divider } from '@/components/ui/Divider';
 import { useFranchiseeChatThreads } from '@/hooks/useChat';
 import { useFranchiseeBottomNav } from '@/hooks/useFranchiseeBottomNav';
 import { useFranchiseeI18n } from '@/hooks/useFranchiseeI18n';
+import { useUserNotifications } from '@/hooks/useNotifications';
 import { useFranchiseeWorkspace } from '@/hooks/useFranchiseeWorkspace';
 import { useFranchiseeOrders } from '@/hooks/useOrders';
 import { useProducts } from '@/hooks/useProducts';
@@ -50,6 +53,7 @@ export default function FranchiseeDashboardScreen() {
   const { isLoading, orders } = useFranchiseeOrders(scope);
   const { products } = useProducts();
   const { threads } = useFranchiseeChatThreads(scope);
+  const { notifications } = useUserNotifications(workspace.userId ?? null, { markRead: false });
   const [mutatingOrderId, setMutatingOrderId] = useState<string | null>(null);
   const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, string>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -80,8 +84,8 @@ export default function FranchiseeDashboardScreen() {
   const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
   const threadByOrderId = useMemo(() => new Map(threads.map((thread) => [thread.orderId, thread])), [threads]);
   const unreadSupportCount = getFranchiseeUnreadSupportCount(threads);
+  const unreadNotificationCount = notifications.filter((notification) => !notification.readAt).length;
   const incomingOrders = displayOrders.filter((order) => order.status === 'placed').slice(0, 2);
-  const isCompact = width < 720;
   const isWide = width >= 980;
   const isDashboardLoading = isLoading && !orders.length;
 
@@ -137,20 +141,41 @@ export default function FranchiseeDashboardScreen() {
         <>
           <View style={[styles.hero, isWide ? styles.heroWide : null]}>
             <View style={styles.heroCopy}>
-              <Text style={styles.heroEyebrow}>{copy.home.heroEyebrow}</Text>
+              <View style={styles.heroUtilityRow}>
+                <Text style={styles.heroEyebrow}>{copy.home.heroEyebrow}</Text>
+                <Pressable
+                  onPress={() => router.push('/franchisee/notifications')}
+                  style={({ pressed }) => [styles.iconButton, pressed ? styles.iconButtonPressed : null]}
+                >
+                  <AssetIcon color={theme.colors.text.inverse} name="alarm" size={17} />
+                  {unreadNotificationCount ? (
+                    <View style={styles.notificationBadge}>
+                      <Text style={styles.notificationBadgeText}>
+                        {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                      </Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              </View>
+
               <Text style={styles.heroTitle}>{copy.home.heroTitle}</Text>
               <Text style={styles.heroBody}>{copy.home.heroBody}</Text>
 
               <View style={styles.heroSupportStrip}>
                 <View style={styles.heroSupportCell}>
                   <Text style={styles.heroSupportLabel}>{copy.home.liveOrders}</Text>
-                  <Text style={styles.heroSupportValue}>{metrics.liveCount.toString().padStart(2, '0')}</Text>
+                  <Text style={styles.heroSupportValue}>{metrics.liveCount}</Text>
                 </View>
                 <Divider style={styles.heroSupportDivider} />
                 <View style={styles.heroSupportCell}>
                   <Text style={styles.heroSupportLabel}>{copy.home.unreadChat}</Text>
-                  <Text style={styles.heroSupportValue}>{unreadSupportCount.toString().padStart(2, '0')}</Text>
+                  <Text style={styles.heroSupportValue}>{unreadSupportCount}</Text>
                 </View>
+              </View>
+
+              <View style={styles.managementActions}>
+                <Button label="Catalog" onPress={() => router.push('/franchisee/catalog')} size="sm" variant="secondary" />
+                <Button label="Network" onPress={() => router.push('/franchisee/network')} size="sm" variant="ghost" />
               </View>
             </View>
 
@@ -176,21 +201,6 @@ export default function FranchiseeDashboardScreen() {
               <Text style={styles.errorText}>{errorMessage}</Text>
             </View>
           ) : null}
-
-          <View style={styles.metricGrid}>
-            <View style={[styles.metricItem, isCompact ? styles.metricItemCompact : null]}>
-              <FranchiseeMetricTile label={copy.home.newOrders} value={metrics.newOrdersCount.toString().padStart(2, '0')} />
-            </View>
-            <View style={[styles.metricItem, isCompact ? styles.metricItemCompact : null]}>
-              <FranchiseeMetricTile label={copy.home.inProduction} value={metrics.inProductionCount.toString().padStart(2, '0')} />
-            </View>
-            <View style={[styles.metricItem, isCompact ? styles.metricItemCompact : null]}>
-              <FranchiseeMetricTile label={copy.home.readyNow} value={metrics.readyCount.toString().padStart(2, '0')} />
-            </View>
-            <View style={[styles.metricItem, isCompact ? styles.metricItemCompact : null]}>
-              <FranchiseeMetricTile label={copy.home.delivered} value={metrics.deliveredCount.toString().padStart(2, '0')} />
-            </View>
-          </View>
 
           <View style={styles.sectionBlock}>
             <Text style={styles.sectionLabel}>{copy.home.liveFlow}</Text>
@@ -270,10 +280,12 @@ const styles = StyleSheet.create({
     lineHeight: theme.typography.lineHeight.sm,
   },
   heroCopy: {
+    flex: 1,
     gap: theme.spacing.md,
   },
   heroEyebrow: {
     color: theme.colors.text.inverseMuted,
+    flex: 1,
     fontSize: theme.typography.size.xs,
     fontWeight: theme.typography.weight.medium,
     letterSpacing: theme.typography.tracking.widest,
@@ -311,6 +323,10 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.size.xl,
     lineHeight: theme.typography.lineHeight.xl,
   },
+  managementActions: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
   heroTitle: {
     color: theme.colors.text.inverse,
     fontFamily: theme.typography.family.display,
@@ -318,21 +334,46 @@ const styles = StyleSheet.create({
     lineHeight: theme.typography.lineHeight.xxl,
     maxWidth: 420,
   },
+  heroUtilityRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+  },
   heroWide: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  metricGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
-    justifyContent: 'space-between',
+  iconButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 18,
+    borderWidth: theme.borders.width.thin,
+    height: 36,
+    justifyContent: 'center',
+    position: 'relative',
+    width: 36,
   },
-  metricItem: {
-    width: '48.7%',
+  iconButtonPressed: {
+    opacity: 0.84,
   },
-  metricItemCompact: {
-    width: '100%',
+  notificationBadge: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface.default,
+    borderRadius: 9,
+    height: 18,
+    justifyContent: 'center',
+    minWidth: 18,
+    paddingHorizontal: 4,
+    position: 'absolute',
+    right: -2,
+    top: -2,
+  },
+  notificationBadgeText: {
+    color: theme.colors.text.primary,
+    fontSize: 9,
+    fontWeight: theme.typography.weight.semibold,
+    letterSpacing: 0.4,
   },
   orderList: {
     gap: theme.spacing.md,

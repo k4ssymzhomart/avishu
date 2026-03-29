@@ -40,7 +40,14 @@ export function useCustomerProfile(seed: CustomerProfileSeed | null) {
 
   const saveProfile = useMemo(
     () =>
-      async (patch: Partial<Pick<CustomerProfile, 'addresses' | 'displayName' | 'phone' | 'role'>>) => {
+      async (
+        patch: Partial<
+          Pick<
+            CustomerProfile,
+            'addresses' | 'assignedFranchiseId' | 'assignedFranchiseName' | 'displayName' | 'phone' | 'role'
+          >
+        >,
+      ) => {
         if (!uid) {
           return;
         }

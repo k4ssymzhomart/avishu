@@ -8,9 +8,12 @@ import { CheckoutHeader } from '@/components/customer/CheckoutHeader';
 import { CheckoutProductSummary } from '@/components/customer/CheckoutProductSummary';
 import { Screen } from '@/components/layout/Screen';
 import { Button } from '@/components/ui/Button';
+import { useFranchises } from '@/hooks/useFranchises';
+import { useCustomerI18n } from '@/hooks/useCustomerI18n';
 import { useProducts } from '@/hooks/useProducts';
+import { demoUsersByRole } from '@/lib/constants/demo';
 import { theme } from '@/lib/theme/tokens';
-import { formatCurrency, formatDeliveryMethod } from '@/lib/utils/format';
+import { formatCurrency } from '@/lib/utils/format';
 import { buildPreorderDates, getProductCatalogMeta } from '@/lib/utils/productCatalog';
 import { useCartStore } from '@/store/cart';
 import { useSessionStore } from '@/store/session';
@@ -21,9 +24,15 @@ const deliveryMethods: DeliveryMethod[] = ['boutique_pickup', 'city_courier', 'e
 export default function CheckoutDeliveryScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ mode?: string; productId?: string }>();
+  const { copy, formatDeliveryMethodLabel, language } = useCustomerI18n();
   const { products } = useProducts();
   const currentUserProfile = useSessionStore((state) => state.currentUserProfile);
+  const { franchises } = useFranchises();
   const { beginCartCheckout, beginDirectCheckout, cartItems, draft, updateDraft } = useCartStore();
+  const assignedFranchiseId = currentUserProfile?.assignedFranchiseId ?? demoUsersByRole.customer.franchiseId ?? null;
+  const assignedFranchise = franchises.find((franchise) => franchise.id === assignedFranchiseId) ?? null;
+  const pickupLocation = assignedFranchise?.address ?? copy.checkout.pickupLocation;
+  const pickupHint = assignedFranchise?.name ?? copy.checkout.pickupHint;
 
   const directProduct = products.find((item) => item.id === params.productId);
   const selectedCartItems = useMemo(
@@ -76,7 +85,7 @@ export default function CheckoutDeliveryScreen() {
       footer={
         <Button
           disabled={!canContinue}
-          label="Continue to payment"
+          label={copy.checkout.continueToPayment}
           onPress={() =>
             router.push(
               draft.mode === 'cart'
@@ -94,15 +103,17 @@ export default function CheckoutDeliveryScreen() {
     >
       <CheckoutHeader
         currentStep={3}
+        eyebrow={copy.checkout.purchaseFlow}
         onBackPress={() => router.back()}
-        subtitle="Choose pickup or courier, then confirm the delivery details."
-        title="Delivery method"
+        stepLabel={copy.checkout.step}
+        subtitle={copy.checkout.deliverySubtitle}
+        title={copy.checkout.deliveryTitle}
       />
 
       {draft.mode === 'cart' && selectedCartItems.length > 1 ? (
         <View style={styles.multiItemPanel}>
-          <Text style={styles.multiItemEyebrow}>Selected cart</Text>
-          <Text style={styles.multiItemTitle}>{selectedCartItems.length} pieces ready for checkout</Text>
+          <Text style={styles.multiItemEyebrow}>{copy.checkout.multiItemEyebrow}</Text>
+          <Text style={styles.multiItemTitle}>{`${selectedCartItems.length} ${copy.checkout.selectedCartPieces}`}</Text>
           <Text style={styles.multiItemBody}>
             {selectedCartItems.map((item) => `${item.productName} / ${item.size}`).join('\n')}
           </Text>
@@ -113,7 +124,7 @@ export default function CheckoutDeliveryScreen() {
             checkoutProduct.collection ?? 'AVISHU',
             singleCartItem?.size ?? draft.size ?? getProductCatalogMeta(checkoutProduct).sizes[0],
           ]}
-          eyebrow="Order summary"
+          eyebrow={copy.checkout.orderSummary}
           imageUrl={checkoutProduct.imageUrl}
           price={formatCurrency(checkoutProduct.price)}
           title={checkoutProduct.name}
@@ -123,15 +134,18 @@ export default function CheckoutDeliveryScreen() {
       {checkoutProduct?.availability === 'preorder' && preorderDates.length > 0 && selectedCartItems.length <= 1 ? (
         <CalendarDatePicker
           availableDates={preorderDates}
-          helper="Boutique scheduling stays attached to your preorder."
-          label="Preferred ready date"
+          helper={copy.checkout.preorderHelper}
+          label={copy.checkout.preferredReadyDate}
+          locale={language === 'ru' ? 'ru-RU' : 'en-US'}
           onSelect={(value) => updateDraft({ preferredReadyDate: value })}
           selectedDate={draft.preferredReadyDate ?? preorderDates[0]}
+          selectDateLabel={copy.checkout.readyTarget}
+          weekdayLabels={language === 'ru' ? ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'] : ['M', 'T', 'W', 'T', 'F', 'S', 'S']}
         />
       ) : null}
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Method</Text>
+        <Text style={styles.sectionLabel}>{copy.checkout.method}</Text>
         <View style={styles.methodGrid}>
           {deliveryMethods.map((method) => {
             const isSelected = draft.deliveryMethod === method;
@@ -143,7 +157,7 @@ export default function CheckoutDeliveryScreen() {
                 style={[styles.methodCard, isSelected ? styles.methodCardActive : null]}
               >
                 <Text style={[styles.methodLabel, isSelected ? styles.methodLabelActive : null]}>
-                  {formatDeliveryMethod(method)}
+                  {formatDeliveryMethodLabel(method)}
                 </Text>
               </Pressable>
             );
@@ -152,28 +166,26 @@ export default function CheckoutDeliveryScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Address</Text>
+        <Text style={styles.sectionLabel}>{copy.checkout.address}</Text>
         <TextInput
           editable={needsAddress}
           onChangeText={(value) => updateDraft({ deliveryAddress: value })}
-          placeholder={needsAddress ? '12 Kabanbay Batyr Ave, Astana' : 'Boutique pickup location'}
+          placeholder={needsAddress ? copy.checkout.addressPlaceholder : pickupLocation}
           placeholderTextColor={theme.colors.text.tertiary}
           style={[styles.field, !needsAddress ? styles.fieldDisabled : null]}
-          value={needsAddress ? draft.deliveryAddress : 'AVISHU boutique pickup point'}
+          value={needsAddress ? draft.deliveryAddress : pickupLocation}
         />
         <Text style={styles.fieldHint}>
-          {needsAddress
-            ? 'Courier details stay attached to the support thread after payment.'
-            : 'Pickup location is confirmed in the order chat after payment.'}
+          {needsAddress ? copy.checkout.courierHint : pickupHint}
         </Text>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Note</Text>
+        <Text style={styles.sectionLabel}>{copy.checkout.note}</Text>
         <TextInput
           multiline
           onChangeText={(value) => updateDraft({ deliveryNote: value })}
-          placeholder="Optional note for boutique or courier"
+          placeholder={copy.checkout.notePlaceholder}
           placeholderTextColor={theme.colors.text.tertiary}
           style={[styles.field, styles.fieldMultiline]}
           textAlignVertical="top"

@@ -166,17 +166,17 @@ export default function FranchiseeOrdersScreen() {
       <View style={styles.summaryStrip}>
         <View style={styles.summaryCell}>
           <Text style={styles.summaryLabel}>{copy.orders.liveIntake}</Text>
-          <Text style={styles.summaryValue}>{metrics.newOrdersCount.toString().padStart(2, '0')}</Text>
+          <Text style={styles.summaryValue}>{metrics.newOrdersCount}</Text>
           <Text style={styles.summaryBody}>{copy.orders.liveIntakeHint}</Text>
         </View>
         <View style={styles.summaryCell}>
           <Text style={styles.summaryLabel}>{copy.orders.readyHandoff}</Text>
-          <Text style={styles.summaryValue}>{metrics.readyCount.toString().padStart(2, '0')}</Text>
+          <Text style={styles.summaryValue}>{metrics.readyCount}</Text>
           <Text style={styles.summaryBody}>{copy.orders.readyHandoffHint}</Text>
         </View>
         <View style={styles.summaryCell}>
           <Text style={styles.summaryLabel}>{copy.orders.support}</Text>
-          <Text style={styles.summaryValue}>{unreadSupportCount.toString().padStart(2, '0')}</Text>
+          <Text style={styles.summaryValue}>{unreadSupportCount}</Text>
           <Text style={styles.summaryBody}>{copy.orders.supportHint}</Text>
         </View>
         <View style={styles.summaryCell}>

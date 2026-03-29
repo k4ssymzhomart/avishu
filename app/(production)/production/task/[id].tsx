@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { Keyboard, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'react-native';
 
 import { ProductionBoardEmptyState } from '@/components/production/ProductionBoardEmptyState';
 import { ProductionBoardSkeleton } from '@/components/production/ProductionBoardSkeleton';
+import { ProductionHeaderNotificationAction } from '@/components/production/ProductionHeaderNotificationAction';
 import { ProductionStageBadge } from '@/components/production/ProductionStageBadge';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Screen } from '@/components/layout/Screen';
@@ -31,12 +33,14 @@ const noteTemplates = [
 function DetailStat({
   label,
   value,
+  style,
 }: {
   label: string;
+  style?: StyleProp<ViewStyle>;
   value: string;
 }) {
   return (
-    <View style={styles.detailStat}>
+    <View style={[styles.detailStat, style]}>
       <Text style={styles.detailStatLabel}>{label}</Text>
       <Text style={styles.detailStatValue}>{value}</Text>
     </View>
@@ -75,7 +79,13 @@ export default function ProductionTaskDetailScreen() {
         maxContentWidth={1240}
         scroll
       >
-        <AppHeader eyebrow="AVISHU / PRODUCTION" onBackPress={() => router.back()} showBackButton title="Task" />
+        <AppHeader
+          actionSlot={<ProductionHeaderNotificationAction />}
+          eyebrow="AVISHU / PRODUCTION"
+          onBackPress={() => router.back()}
+          showBackButton
+          title="Task"
+        />
         <ProductionBoardSkeleton count={1} />
       </Screen>
     );
@@ -90,7 +100,13 @@ export default function ProductionTaskDetailScreen() {
         maxContentWidth={1240}
         scroll
       >
-        <AppHeader eyebrow="AVISHU / PRODUCTION" onBackPress={() => router.back()} showBackButton title="Task" />
+        <AppHeader
+          actionSlot={<ProductionHeaderNotificationAction />}
+          eyebrow="AVISHU / PRODUCTION"
+          onBackPress={() => router.back()}
+          showBackButton
+          title="Task"
+        />
         <ProductionBoardEmptyState
           description="This garment is no longer on the current production board."
           title="Task not found"
@@ -119,7 +135,7 @@ export default function ProductionTaskDetailScreen() {
       await saveTaskNote(task.id, noteDraft);
       Keyboard.dismiss();
     } catch {
-      setNoteError('Internal note was not saved. Check Firestore access or demo mode.');
+      setNoteError('Internal note was not saved. Check Firestore access and workshop sync.');
     }
   };
 
@@ -137,7 +153,7 @@ export default function ProductionTaskDetailScreen() {
         await completeTask(task.id);
       }
     } catch {
-      setStatusError('Status change did not sync to the shared order stream. Check Firestore access or demo mode.');
+      setStatusError('Status change did not sync to the shared order stream. Check Firestore access and order routing.');
     }
   };
 
@@ -166,6 +182,7 @@ export default function ProductionTaskDetailScreen() {
       scroll
     >
       <AppHeader
+        actionSlot={<ProductionHeaderNotificationAction />}
         eyebrow="AVISHU / PRODUCTION"
         onBackPress={() => router.back()}
         showBackButton
@@ -211,7 +228,11 @@ export default function ProductionTaskDetailScreen() {
             <DetailStat label="Delivery" value={getProductionDeliveryLabel(task.order)} />
             <DetailStat label="Priority" value={task.priorityLabel} />
             <DetailStat label="Current stage" value={task.stageMeta} />
-            <DetailStat label="Internal note" value={task.order.productionNote ? 'Saved' : 'Empty'} />
+            <DetailStat
+              label="Internal note"
+              style={styles.detailStatFull}
+              value={task.order.productionNote ?? 'No internal note yet'}
+            />
           </View>
         </View>
       </View>
@@ -321,17 +342,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
-    justifyContent: 'space-between',
+    width: '100%',
   },
   detailStat: {
     backgroundColor: theme.colors.surface.default,
     borderColor: theme.colors.border.subtle,
     borderRadius: theme.borders.radius.sm,
     borderWidth: theme.borders.width.thin,
+    flexBasis: '48.5%',
+    flexGrow: 1,
     gap: theme.spacing.xs,
     minHeight: 88,
+    minWidth: 0,
     padding: theme.spacing.md,
-    width: '48.5%',
+  },
+  detailStatFull: {
+    flexBasis: '100%',
+    width: '100%',
   },
   detailStatLabel: {
     color: theme.colors.text.secondary,
@@ -364,7 +391,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   heroContent: {
+    flex: 1,
     gap: theme.spacing.lg,
+    minWidth: 0,
     padding: theme.spacing.lg,
   },
   heroCopy: {
@@ -386,7 +415,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
-    justifyContent: 'space-between',
+    width: '100%',
   },
   heroStatusRow: {
     alignItems: 'center',
@@ -400,6 +429,7 @@ const styles = StyleSheet.create({
     lineHeight: theme.typography.lineHeight.xxxl,
   },
   heroWide: {
+    alignItems: 'stretch',
     flexDirection: 'row',
   },
   imageFallback: {

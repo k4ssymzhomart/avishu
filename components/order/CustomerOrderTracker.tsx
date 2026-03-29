@@ -1,22 +1,22 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '@/lib/theme/tokens';
+import { formatCustomerStage } from '@/lib/utils/format';
 import type { OrderStatus } from '@/types/order';
 
-const steps = [
-  { key: 'placed', label: 'Placed' },
-  { key: 'accepted', label: 'Accepted' },
-  { key: 'in_production', label: 'In production' },
-  { key: 'ready', label: 'Ready' },
-  { key: 'out_for_delivery', label: 'Out for delivery' },
-  { key: 'delivered', label: 'Delivered' },
-] as const;
+const steps = ['placed', 'accepted', 'in_production', 'ready', 'out_for_delivery', 'delivered'] as const;
 
 function resolveStepIndex(status: OrderStatus) {
-  return steps.findIndex((step) => step.key === status);
+  return steps.findIndex((step) => step === status);
 }
 
-export function CustomerOrderTracker({ status }: { status: OrderStatus }) {
+export function CustomerOrderTracker({
+  language = 'en',
+  status,
+}: {
+  language?: 'en' | 'ru';
+  status: OrderStatus;
+}) {
   const currentIndex = resolveStepIndex(status);
 
   return (
@@ -25,9 +25,9 @@ export function CustomerOrderTracker({ status }: { status: OrderStatus }) {
         const isActive = index <= currentIndex;
 
         return (
-          <View key={step.key} style={[styles.step, isActive ? styles.stepActive : null]}>
+          <View key={step} style={[styles.step, isActive ? styles.stepActive : null]}>
             <Text style={[styles.index, isActive ? styles.inverseText : null]}>{`0${index + 1}`}</Text>
-            <Text style={[styles.label, isActive ? styles.inverseText : null]}>{step.label}</Text>
+            <Text style={[styles.label, isActive ? styles.inverseText : null]}>{formatCustomerStage(step, language)}</Text>
           </View>
         );
       })}

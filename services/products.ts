@@ -1,9 +1,9 @@
-import { collection, doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 
 import { demoProducts } from '@/lib/constants/demo';
 import { getFirestoreInstance } from '@/lib/firebase';
 import { useDemoRealtimeStore } from '@/store/demoRealtime';
-import type { Product } from '@/types/product';
+import type { Product, ProductDraft } from '@/types/product';
 
 const PRODUCTS_COLLECTION = 'products';
 const productListeners = new Set<(products: Product[]) => void>();
@@ -17,9 +17,11 @@ function sortProducts(products: Product[]) {
 function normalizeProduct(record: Partial<Product>, fallbackId: string): Product {
   return {
     availability: record.availability === 'preorder' ? 'preorder' : 'in_stock',
+    assignedBranches: Array.isArray(record.assignedBranches) ? record.assignedBranches.filter(Boolean) : [],
     category: record.category,
     collection: record.collection,
     colors: record.colors ?? [],
+    createdBy: record.createdBy?.trim().length ? record.createdBy.trim() : 'admin',
     description: record.description,
     fit: record.fit,
     id: record.id ?? fallbackId,
@@ -30,6 +32,37 @@ function normalizeProduct(record: Partial<Product>, fallbackId: string): Product
     price: typeof record.price === 'number' ? record.price : 0,
     sizes: record.sizes ?? [],
   };
+}
+
+export function isProductVisibleToBranch(product: Product, branchId: string | null | undefined) {
+  if (!branchId) {
+    return true;
+  }
+
+  return (
+    product.createdBy === branchId ||
+    product.assignedBranches.includes(branchId) ||
+    product.assignedBranches.length === 0
+  );
+}
+
+export function getVisibleProductsForBranch(products: Product[], branchId: string | null | undefined) {
+  return sortProducts(products.filter((product) => isProductVisibleToBranch(product, branchId)));
+}
+
+export function getManageableProductsForFranchise(products: Product[], franchiseId: string | null | undefined) {
+  if (!franchiseId) {
+    return sortProducts(products);
+  }
+
+  return sortProducts(
+    products.filter(
+      (product) =>
+        product.createdBy === franchiseId ||
+        product.assignedBranches.includes(franchiseId) ||
+        product.assignedBranches.length === 0,
+    ),
+  );
 }
 
 function emitProducts(products: Product[]) {
@@ -96,6 +129,35 @@ export function subscribeToProducts(onProducts: (products: Product[]) => void) {
       productListUnsubscribe = null;
     }
   };
+}
+
+export async function upsertProduct(input: ProductDraft) {
+  const firestore = getFirestoreInstance();
+  const normalizedProduct: Product = normalizeProduct(
+    {
+      ...input,
+      assignedBranches: [...new Set(input.assignedBranches.filter(Boolean))],
+      createdBy: input.createdBy || 'admin',
+      id: input.id,
+    },
+    input.id?.trim().length ? input.id.trim() : `product-${Date.now().toString(36)}`,
+  );
+
+  if (!firestore) {
+    useDemoRealtimeStore.getState().upsertProduct(normalizedProduct);
+    return normalizedProduct.id;
+  }
+
+  await setDoc(
+    doc(firestore, PRODUCTS_COLLECTION, normalizedProduct.id),
+    {
+      ...normalizedProduct,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+
+  return normalizedProduct.id;
 }
 
 export function subscribeToProduct(productId: string, onProduct: (product: Product | null) => void) {

@@ -5,6 +5,7 @@ import { Redirect, Stack } from 'expo-router';
 import { useCustomerCartSync } from '@/hooks/useCustomerCart';
 import { useCustomerFavoritesSync } from '@/hooks/useCustomerFavorites';
 import { useCustomerProfile } from '@/hooks/useCustomerProfile';
+import { demoUsersByRole } from '@/lib/constants/demo';
 import { useSessionStore } from '@/store/session';
 
 function CustomerDataBridge() {
@@ -18,6 +19,8 @@ function CustomerDataBridge() {
     currentRole === 'customer' && currentUserId
       ? {
           displayName: currentUserName,
+          franchiseId: demoUsersByRole.customer.franchiseId ?? null,
+          franchiseName: demoUsersByRole.customer.franchiseName ?? null,
           phone: currentUserPhoneNumber,
           role: currentRole,
           uid: currentUserId,
