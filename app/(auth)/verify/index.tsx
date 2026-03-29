@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { TextButton } from '@/components/ui/TextButton';
 import { useRoleRedirect } from '@/hooks/useRoleRedirect';
 import { theme } from '@/lib/theme/tokens';
-import { resolvePhoneAuthErrorMessage } from '@/services/auth';
+import { DEMO_PHONE_OTP_CODE, isDemoPhoneAuthEnabled, resolvePhoneAuthErrorMessage } from '@/services/auth';
 import { useSessionStore } from '@/store/session';
 
 export default function VerifyOtpScreen() {
@@ -26,6 +26,7 @@ export default function VerifyOtpScreen() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(30);
+  const usesDemoCode = isDemoPhoneAuthEnabled();
 
   useEffect(() => {
     if (resendCountdown <= 0) {
@@ -82,7 +83,9 @@ export default function VerifyOtpScreen() {
     try {
       await beginPhoneAuth(pendingPhoneDisplayNumber, { forceResend: true });
       setCode('');
-      setStatusMessage('A fresh 6-digit code has been sent.');
+      setStatusMessage(
+        usesDemoCode ? `Demo mode is ready. Use code ${DEMO_PHONE_OTP_CODE} to continue.` : 'A fresh 6-digit code has been sent.',
+      );
       setResendCountdown(30);
     } catch (error) {
       setErrorMessage(resolvePhoneAuthErrorMessage(error, 'request'));
@@ -117,7 +120,11 @@ export default function VerifyOtpScreen() {
             eyebrow="Verify phone"
             onBackPress={handleEditNumber}
             showBackButton
-            subtitle="Enter the real 6-digit SMS code from Firebase to continue."
+            subtitle={
+              usesDemoCode
+                ? `Enter demo code ${DEMO_PHONE_OTP_CODE} to continue in Expo Go.`
+                : 'Enter the real 6-digit SMS code from Firebase to continue.'
+            }
             title="Enter the code."
           />
 
